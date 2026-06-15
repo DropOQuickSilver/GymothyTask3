@@ -1,5 +1,5 @@
-This is my Software Engineering Task 2 project prototype
-My project is called "Gymothy" and is a diet and workout tracker app
+This is my Software Engineering Task 3 project 
+My project is called "Gymothy" and is a diet and workout tracker app, and to also utilize ML to give feedback and predict progress!
 
 How to set up to run locally:
   1. install python
