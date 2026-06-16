@@ -143,6 +143,10 @@ class ExerciseEntryForm(FlaskForm):
     rpe = FloatField("RPE")
     submit = SubmitField("Add Exercise")
 
+# ---> ADD THIS CODE BLOCK HERE <---
+# This checks and builds your database tables on Render automatically when the app boots
+with app.app_context():
+    db.create_all()
 
 # Route Pages
 
