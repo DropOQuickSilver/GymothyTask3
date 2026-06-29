@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strength Prediction | Gymothy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-icon">G</div>
+                <div>
+                    <h2>Gymothy</h2>
+                    <p>Workout & Nutrition Tracker</p>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <p class="nav-heading">Main</p>
+                <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+                <a href="{{ url_for('sessions') }}" class="nav-link">Workout Sessions</a>
+                <a href="{{ url_for('macros') }}" class="nav-link">Macros</a>
+                <a href="{{ url_for('prediction') }}" class="nav-link active">Strength Prediction</a>
+
+                <p class="nav-heading nav-spacing">Account</p>
+                <a href="{{ url_for('logout') }}" class="nav-link">Log out</a>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <div>
+                    <h1>Strength Prediction</h1>
+                    <p class="topbar-subtext">
+                        Estimate your future strength trend using your logged workout data.
+                    </p>
+                </div>
+
+                <div class="topbar-right">
+                    <div class="user-pill">{{ current_user.username[0]|upper }}</div>
+                    <span class="user-name">{{ current_user.username }}</span>
+                    <a href="{{ url_for('dashboard') }}" class="primary-action">Back to Dashboard</a>
+                </div>
+            </header>
+
+            <section class="prediction-layout">
+                <article class="panel large-panel prediction-control-panel">
+                    <div class="panel-header">
+                        <h3>Gymothy Strength Progress Predictor</h3>
+                    </div>
+
+                    <div class="prediction-card-body">
+                        <p class="prediction-description">
+                            This tool estimates your future strength trend from your logged workout data.
+                            It is an estimate only and should not replace safe training judgement.
+                        </p>
+
+                        <form method="POST" class="prediction-form">
+                            {{ form.hidden_tag() }}
+
+                            <div class="form-group">
+                                {{ form.lift_name.label }}
+                                {{ form.lift_name(class="form-control") }}
+                            </div>
+
+                            <div class="form-actions">
+                                {{ form.submit(class="primary-action") }}
+                            </div>
+                        </form>
+
+                        {% if error %}
+                            <div class="error-box">
+                                <strong>Prediction unavailable</strong>
+                                <p>{{ error }}</p>
+                            </div>
+                        {% endif %}
+
+                        {% if result %}
+                            <div class="prediction-line-chart-card">
+                                <div class="panel-header">
+                                    <h3>3 Week Strength Prediction Graph</h3>
+                                </div>
+
+                                <p class="chart-caption">
+                                    This graph shows your recent estimated maxes and projects your estimated max
+                                    three weeks ahead if your recent rate of progress stays consistent.
+                                </p>
+
+                                <svg class="line-chart" viewBox="0 0 560 285" role="img" aria-label="3 week strength projection line graph">
+                                    {% for tick in result.chart.y_ticks %}
+                                        <line
+                                            x1="80"
+                                            y1="{{ tick.y }}"
+                                            x2="540"
+                                            y2="{{ tick.y }}"
+                                            class="chart-grid-line">
+                                        </line>
+
+                                        <text
+                                            x="68"
+                                            y="{{ tick.y + 4 }}"
+                                            text-anchor="end"
+                                            class="axis-value">
+                                            {{ tick.value }}kg
+                                        </text>
+                                    {% endfor %}
+
+                                    <line x1="80" y1="30" x2="80" y2="220" class="chart-axis"></line>
+                                    <line x1="80" y1="220" x2="540" y2="220" class="chart-axis"></line>
+
+                                    <polyline
+                                        points="{{ result.chart.polyline }}"
+                                        class="prediction-line"
+                                        fill="none">
+                                    </polyline>
+
+                                    {% for point in result.chart.points %}
+                                        <circle
+                                            cx="{{ point.x }}"
+                                            cy="{{ point.y }}"
+                                            r="5"
+                                            class="{% if point.is_projection %}prediction-point projected-point{% else %}prediction-point history-point{% endif %}">
+                                        </circle>
+
+                                        <text
+                                            x="{{ point.x }}"
+                                            y="{{ point.y - 12 }}"
+                                            text-anchor="middle"
+                                            class="point-value">
+                                            {{ point.value }}kg
+                                        </text>
+
+                                        <text
+                                            x="{{ point.x }}"
+                                            y="260"
+                                            text-anchor="middle"
+                                            class="point-label">
+                                            {{ point.label }}
+                                        </text>
+                                    {% endfor %}
+                                </svg>
+
+                                <div class="chart-summary">
+                                    <span>Projected change:</span>
+                                    <strong>{{ result.change }} kg / {{ result.percent_change }}%</strong>
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </article>
+
+                {% if result %}
+                    <article class="panel large-panel prediction-result-panel">
+                        <div class="panel-header">
+                            <h3>{{ result.lift_name }} Prediction Result</h3>
+                        </div>
+
+                        <div class="prediction-result-body">
+                            <section class="stats-grid prediction-stats">
+                                <article class="stat-card accent-blue">
+                                    <div class="stat-icon">📊</div>
+                                    <h2>{{ result.record_count }}</h2>
+                                    <p class="stat-label">VALID RECORDS</p>
+                                </article>
+
+                                <article class="stat-card accent-orange">
+                                    <div class="stat-icon">🏆</div>
+                                    <h2>{{ result.current_1rm }} kg</h2>
+                                    <p class="stat-label">CURRENT EST. 1RM</p>
+                                </article>
+
+                                <article class="stat-card accent-green">
+                                    <div class="stat-icon">📈</div>
+                                    <h2>{{ result.projected_3_week_1rm }} kg</h2>
+                                    <p class="stat-label">3-WEEK PROJECTED MAX</p>
+                                </article>
+
+                                <article class="stat-card accent-dark">
+                                    <div class="stat-icon">⚡</div>
+                                    <h2>{{ result.trend }}</h2>
+                                    <p class="stat-label">TREND</p>
+                                </article>
+                            </section>
+
+                            <div class="prediction-summary">
+                                <div class="macro-row">
+                                    <span>Current estimated max</span>
+                                    <strong>{{ result.current_1rm }} kg</strong>
+                                </div>
+
+                                <div class="macro-row">
+                                    <span>Projected max in {{ result.weeks_ahead }} weeks</span>
+                                    <strong>{{ result.projected_3_week_1rm }} kg</strong>
+                                </div>
+
+                                <div class="macro-row">
+                                    <span>Average weekly progress</span>
+                                    <strong>{{ result.average_weekly_change }} kg/week</strong>
+                                </div>
+
+                                <div class="macro-row">
+                                    <span>Projected total change</span>
+                                    <strong>{{ result.change }} kg</strong>
+                                </div>
+
+                                <div class="macro-row">
+                                    <span>Projected percentage change</span>
+                                    <strong>{{ result.percent_change }}%</strong>
+                                </div>
+
+                                <div class="macro-row">
+                                    <span>Model type</span>
+                                    <strong>{{ result.metrics.model_type }}</strong>
+                                </div>
+
+                                <div class="macro-row">
+                                    <span>Model MAE</span>
+                                    <strong>{{ result.metrics.mae }} kg</strong>
+                                </div>
+                            </div>
+
+                            <div class="warning-box">
+                                <strong>Model limitation</strong>
+                                <p>
+                                    This projection is based only on previous logged data. It does not consider
+                                    sleep, fatigue, injury, nutrition, technique or daily readiness. Use it as a guide only.
+                                </p>
+                            </div>
+                        </div>
+                    </article>
+                {% else %}
+                    <article class="panel prediction-result-panel">
+                        <div class="panel-header">
+                            <h3>How it works</h3>
+                        </div>
+
+                        <div class="prediction-result-body">
+                            <div class="macro-list">
+                                <div class="macro-row">
+                                    <span>Input data</span>
+                                    <strong>Workout logs</strong>
+                                </div>
+
+                                <div class="macro-row">
+                                    <span>Calculation</span>
+                                    <strong>Estimated 1RM</strong>
+                                </div>
+
+                                <div class="macro-row">
+                                    <span>Projection</span>
+                                    <strong>3 weeks ahead</strong>
+                                </div>
+
+                                <div class="macro-row">
+                                    <span>Output</span>
+                                    <strong>Strength trend</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+                {% endif %}
+            </section>
+        </main>
+    </div>
+</body>
+</html>

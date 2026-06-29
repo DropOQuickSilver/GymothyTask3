@@ -166,7 +166,16 @@ class StrengthPredictor:
         if self.model is None:
             self.load_model()
 
-        input_data = pd.DataFrame([features], columns=self.FEATURE_COLUMNS)
+        clean_features = {
+            "lift_name": str(features["lift_name"]),
+            "session_number": int(features["session_number"]),
+            "estimated_1rm": float(features["estimated_1rm"]),
+            "volume": float(features["volume"]),
+            "avg_rpe": float(features["avg_rpe"]),
+            "days_since_last_session": int(features["days_since_last_session"])
+        }
+
+        input_data = pd.DataFrame([clean_features], columns=self.FEATURE_COLUMNS)
         prediction = self.model.predict(input_data)[0]
 
         return round(float(prediction), 2)

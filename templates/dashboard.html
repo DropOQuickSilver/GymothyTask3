@@ -22,6 +22,7 @@
                 <a href="{{ url_for('dashboard') }}" class="nav-link active">Dashboard</a>
                 <a href="{{ url_for('sessions') }}" class="nav-link">Workout Sessions</a>
                 <a href="{{ url_for('macros') }}" class="nav-link">Macros</a>
+                <a href="{{ url_for('prediction') }}" class="nav-link">Strength Prediction</a>
 
                 <p class="nav-heading nav-spacing">Account</p>
                 <a href="{{ url_for('logout') }}" class="nav-link">Log out</a>
@@ -38,6 +39,7 @@
                 <div class="topbar-right">
                     <div class="user-pill">{{ current_user.username[0]|upper }}</div>
                     <span class="user-name">{{ current_user.username }}</span>
+                    <a href="{{ url_for('prediction') }}" class="primary-action">Strength Prediction</a>
                     <a href="{{ url_for('start_workout') }}" class="primary-action">+ Start Workout</a>
                 </div>
             </header>

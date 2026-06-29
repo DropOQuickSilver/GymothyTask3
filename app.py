@@ -3,11 +3,14 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 import os
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, IntegerField, FloatField
-from wtforms.validators import InputRequired, Length, ValidationError
+from wtforms import StringField, PasswordField, SubmitField, IntegerField, FloatField, SelectField
+from wtforms.validators import InputRequired, Length, ValidationError, NumberRange, Optional
 from flask_bcrypt import Bcrypt
 from flask import abort
 from functools import wraps
+from wtforms import SelectField
+from ml.strength_predictor import StrengthPredictor
+
 
 app = Flask(__name__)
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -72,6 +75,19 @@ class PersonalRecord(db.Model):
     weight = db.Column(db.Integer, nullable=False, default=0)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
+class PredictionForm(FlaskForm):
+    lift_name = SelectField(
+        "Lift",
+        choices=[
+            ("Squat", "Squat"),
+            ("Bench Press", "Bench Press"),
+            ("Deadlift", "Deadlift")
+        ],
+        validators=[InputRequired()]
+    )
+
+    submit = SubmitField("Generate Prediction")
+
 
 
 # Login Manager
@@ -120,33 +136,266 @@ class LoginForm(FlaskForm):
 
 class MealForm(FlaskForm):
     meal_name = StringField("Meal Name", validators=[InputRequired(), Length(min=1, max=100)])
-    calories = IntegerField("Calories", validators=[InputRequired()])
-    protein = IntegerField("Protein (g)", validators=[InputRequired()])
-    carbs = IntegerField("Carbs (g)", validators=[InputRequired()])
-    fats = IntegerField("Fats (g)", validators=[InputRequired()])
+    calories = IntegerField("Calories", validators=[InputRequired(), NumberRange(min=0, max=20000)])
+    protein = IntegerField("Protein (g)", validators=[InputRequired(), NumberRange(min=0, max=1000)])
+    carbs = IntegerField("Carbs (g)", validators=[InputRequired(), NumberRange(min=0, max=1000)])
+    fats = IntegerField("Fats (g)", validators=[InputRequired(), NumberRange(min=0, max=1000)])
     submit = SubmitField("Save Meal")
 
 
 class WorkoutSessionForm(FlaskForm):
     session_name = StringField("Session Name", validators=[InputRequired(), Length(min=1, max=100)])
     date = StringField("Date", validators=[InputRequired(), Length(min=1, max=30)])
-    duration_minutes = IntegerField("Duration (minutes)", validators=[InputRequired()])
+    duration_minutes = IntegerField("Duration (minutes)", validators=[InputRequired(), NumberRange(min=1, max=600)])
     focus = StringField("Focus", validators=[InputRequired(), Length(min=1, max=100)])
     submit = SubmitField("Save Session")
 
 
 class ExerciseEntryForm(FlaskForm):
     exercise_name = StringField("Exercise Name", validators=[InputRequired(), Length(min=1, max=100)])
-    sets = IntegerField("Sets", validators=[InputRequired()])
-    reps = IntegerField("Reps", validators=[InputRequired()])
-    weight = FloatField("Weight (kg)", validators=[InputRequired()])
-    rpe = FloatField("RPE")
+    sets = IntegerField("Sets", validators=[InputRequired(), NumberRange(min=1, max=20)])
+    reps = IntegerField("Reps", validators=[InputRequired(), NumberRange(min=1, max=100)])
+    weight = FloatField("Weight (kg)", validators=[InputRequired(), NumberRange(min=0, max=500)])
+    rpe = FloatField("RPE", validators=[Optional(), NumberRange(min=1, max=10)])
     submit = SubmitField("Add Exercise")
 
-# ---> ADD THIS CODE BLOCK HERE <---
-# This checks and builds your database tables on Render automatically when the app boots
+class PredictionForm(FlaskForm):
+    lift_name = SelectField(
+        "Lift",
+        choices=[
+            ("Squat", "Squat"),
+            ("Bench Press", "Bench Press"),
+            ("Deadlift", "Deadlift")
+        ],
+        validators=[InputRequired()]
+    )
+    submit = SubmitField("Generate Prediction")
+
+class PredictionLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    lift_name = db.Column(db.String(100), nullable=False)
+    current_1rm = db.Column(db.Float, nullable=False)
+    predicted_1rm = db.Column(db.Float, nullable=False)
+    trend = db.Column(db.String(50), nullable=False)
+    records_used = db.Column(db.Integer, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+
 with app.app_context():
     db.create_all()
+
+def calculate_estimated_1rm(weight, reps):
+    if weight <= 0 or reps <= 0:
+        return 0
+    return round(weight * (1 + reps / 30), 2)
+
+
+def get_user_lift_records(user_id, lift_name):
+    return (
+        db.session.query(ExerciseEntry, WorkoutSession)
+        .join(WorkoutSession, ExerciseEntry.session_id == WorkoutSession.id)
+        .filter(WorkoutSession.user_id == user_id)
+        .filter(ExerciseEntry.exercise_name == lift_name)
+        .order_by(WorkoutSession.id.asc())
+        .all()
+    )
+
+
+def prepare_prediction_features(user_id, lift_name):
+    records = get_user_lift_records(user_id, lift_name)
+
+    valid_records = []
+    for exercise, session in records:
+        if exercise.weight > 0 and exercise.reps > 0 and exercise.sets > 0:
+            estimated_1rm = calculate_estimated_1rm(exercise.weight, exercise.reps)
+            volume = exercise.weight * exercise.reps * exercise.sets
+            rpe = exercise.rpe if exercise.rpe else 7.0
+
+            valid_records.append({
+                "session_number": len(valid_records) + 1,
+                "estimated_1rm": float(estimated_1rm),
+                "volume": float(volume),
+                "rpe": float(rpe)
+            })
+
+    if len(valid_records) < 3:
+        return None, len(valid_records), valid_records
+
+    latest = valid_records[-1]
+    avg_rpe = sum(record["rpe"] for record in valid_records[-3:]) / min(3, len(valid_records))
+
+    features = {
+        "lift_name": lift_name,
+        "session_number": len(valid_records),
+        "estimated_1rm": float(latest["estimated_1rm"]),
+        "volume": float(latest["volume"]),
+        "avg_rpe": float(avg_rpe),
+        "days_since_last_session": 7
+    }
+
+    return features, len(valid_records), valid_records
+
+def build_prediction_chart_points(history_points, predicted_1rm):
+    recent_points = history_points[-5:]
+
+    chart_values = []
+
+    for index, point in enumerate(recent_points):
+        chart_values.append({
+            "label": f"Record {index + 1}",
+            "value": float(point["estimated_1rm"]),
+            "is_prediction": False
+        })
+
+    chart_values.append({
+        "label": "Predicted",
+        "value": float(predicted_1rm),
+        "is_prediction": True
+    })
+
+    values = [point["value"] for point in chart_values]
+
+    min_value = min(values)
+    max_value = max(values)
+
+    if min_value == max_value:
+        min_value -= 1
+        max_value += 1
+
+    left = 50
+    right = 460
+    top = 30
+    bottom = 170
+
+    chart_width = right - left
+    chart_height = bottom - top
+
+    total_points = len(chart_values)
+
+    for index, point in enumerate(chart_values):
+        x = left + (chart_width * index / (total_points - 1))
+        y = bottom - ((point["value"] - min_value) / (max_value - min_value) * chart_height)
+
+        point["x"] = round(x, 2)
+        point["y"] = round(y, 2)
+        point["value"] = round(point["value"], 2)
+
+    polyline = " ".join(f"{point['x']},{point['y']}" for point in chart_values)
+
+    return {
+        "points": chart_values,
+        "polyline": polyline,
+        "min_value": round(min_value, 2),
+        "max_value": round(max_value, 2)
+    }
+
+def calculate_three_week_projection(history_points, weeks_ahead=3):
+    recent_points = history_points[-5:]
+    estimated_maxes = [float(point["estimated_1rm"]) for point in recent_points]
+
+    if len(estimated_maxes) < 3:
+        return None
+
+    changes = []
+
+    for index in range(1, len(estimated_maxes)):
+        change = estimated_maxes[index] - estimated_maxes[index - 1]
+        changes.append(change)
+
+    recent_changes = changes[-3:]
+    average_weekly_change = sum(recent_changes) / len(recent_changes)
+
+    current_1rm = estimated_maxes[-1]
+    projected_1rm = current_1rm + (average_weekly_change * weeks_ahead)
+
+    total_change = projected_1rm - current_1rm
+    percent_change = (total_change / current_1rm) * 100 if current_1rm > 0 else 0
+
+    if percent_change >= 2.5:
+        trend = "Improving"
+    elif percent_change <= -2.5:
+        trend = "Declining"
+    else:
+        trend = "Stable"
+
+    return {
+        "current_1rm": round(current_1rm, 2),
+        "projected_1rm": round(projected_1rm, 2),
+        "average_weekly_change": round(average_weekly_change, 2),
+        "total_change": round(total_change, 2),
+        "percent_change": round(percent_change, 2),
+        "trend": trend,
+        "weeks_ahead": weeks_ahead
+    }
+
+def build_projection_chart_points(history_points, projected_1rm):
+    recent_points = history_points[-5:]
+
+    chart_values = []
+
+    for index, point in enumerate(recent_points):
+        chart_values.append({
+            "label": f"S{index + 1}",
+            "value": float(point["estimated_1rm"]),
+            "is_projection": False
+        })
+
+    chart_values.append({
+        "label": "+3w",
+        "value": float(projected_1rm),
+        "is_projection": True
+    })
+
+    values = [point["value"] for point in chart_values]
+
+    raw_min = min(values)
+    raw_max = max(values)
+
+    y_min = int(raw_min // 50) * 50
+    y_max = int((raw_max + 49) // 50) * 50
+
+    if y_min == y_max:
+        y_min -= 50
+        y_max += 50
+
+    # SVG graph boundaries
+    left = 80
+    right = 540
+    top = 30
+    bottom = 220
+
+    chart_width = right - left
+    chart_height = bottom - top
+    total_points = len(chart_values)
+
+    for index, point in enumerate(chart_values):
+        x = left + (chart_width * index / (total_points - 1))
+        y = bottom - ((point["value"] - y_min) / (y_max - y_min) * chart_height)
+
+        point["x"] = round(x, 2)
+        point["y"] = round(y, 2)
+        point["value"] = round(point["value"], 2)
+
+    y_ticks = []
+
+    tick = y_min
+    while tick <= y_max:
+        y = bottom - ((tick - y_min) / (y_max - y_min) * chart_height)
+        y_ticks.append({
+            "value": tick,
+            "y": round(y, 2)
+        })
+        tick += 50
+
+    polyline = " ".join(f"{point['x']},{point['y']}" for point in chart_values)
+
+    return {
+        "points": chart_values,
+        "polyline": polyline,
+        "min_value": y_min,
+        "max_value": y_max,
+        "y_ticks": y_ticks
+    }
 
 # Route Pages
 
@@ -215,6 +464,66 @@ def dashboard():
         recent_meals=recent_meals
     )
 
+@app.route('/prediction', methods=['GET', 'POST'])
+@login_required
+def prediction():
+    form = PredictionForm()
+    result = None
+    error = None
+
+    if form.validate_on_submit():
+        lift_name = form.lift_name.data
+
+        features, record_count, valid_records = prepare_prediction_features(current_user.id, lift_name)
+
+        if features is None:
+            error = (
+                f"Not enough valid {lift_name} records to generate a reliable prediction. "
+                f"At least 3 valid records are required."
+            )
+        else:
+            try:
+                predictor = StrengthPredictor()
+                predictor.load_model()
+
+                ml_next_1rm = predictor.predict_next_1rm(features)
+
+                projection = calculate_three_week_projection(valid_records, weeks_ahead=3)
+
+                if projection is None:
+                    error = "Not enough progression data to calculate a 3-week projection."
+                else:
+                    chart = build_projection_chart_points(
+                        valid_records,
+                        projection["projected_1rm"]
+                    )
+
+                    result = {
+                        "lift_name": lift_name,
+                        "record_count": record_count,
+                        "current_1rm": projection["current_1rm"],
+                        "projected_3_week_1rm": projection["projected_1rm"],
+                        "average_weekly_change": projection["average_weekly_change"],
+                        "change": projection["total_change"],
+                        "percent_change": projection["percent_change"],
+                        "trend": projection["trend"],
+                        "weeks_ahead": projection["weeks_ahead"],
+                        "ml_next_1rm": ml_next_1rm,
+                        "metrics": predictor.metrics,
+                        "chart": chart
+                    }
+
+            except FileNotFoundError:
+                error = "The prediction model has not been trained yet."
+            except Exception as e:
+                error = f"Prediction could not be generated: {str(e)}"
+
+    return render_template(
+        "prediction.html",
+        form=form,
+        result=result,
+        error=error
+    )
 
 @app.route('/sessions')
 @login_required
