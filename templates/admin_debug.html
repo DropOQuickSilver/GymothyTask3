@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Debug | Gymothy</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
@@ -13,7 +12,7 @@
                 <div class="brand-icon">G</div>
                 <div>
                     <h2>Gymothy</h2>
-                    <p>Admin Panel</p>
+                    <p>Admin Tools</p>
                 </div>
             </div>
 
@@ -22,8 +21,10 @@
                 <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
                 <a href="{{ url_for('sessions') }}" class="nav-link">Workout Sessions</a>
                 <a href="{{ url_for('macros') }}" class="nav-link">Macros</a>
+                <a href="{{ url_for('prediction') }}" class="nav-link">Strength Prediction</a>
 
-                <p class="nav-heading nav-spacing">Account</p>
+                <p class="nav-heading nav-spacing">Admin</p>
+                <a href="{{ url_for('admin_debug') }}" class="nav-link active">Admin Debug</a>
                 <a href="{{ url_for('logout') }}" class="nav-link">Log out</a>
             </nav>
         </aside>
@@ -31,116 +32,194 @@
         <main class="main-content">
             <header class="topbar">
                 <div>
-                    <h1>Admin Debug Panel</h1>
-                    <p class="topbar-subtext">Internal database view for development and testing.</p>
+                    <h1>Admin Debug</h1>
+                    <p class="topbar-subtext">
+                        Inspect database records and check data integrity.
+                    </p>
+                </div>
+
+                <div class="topbar-right">
+                    <div class="user-pill">{{ current_user.username[0]|upper }}</div>
+                    <span class="user-name">{{ current_user.username }}</span>
+                    <a href="{{ url_for('dashboard') }}" class="primary-action">Back to Dashboard</a>
                 </div>
             </header>
 
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <div class="success-box">
+                        {% for message in messages %}
+                            <p>{{ message }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
             <section class="stats-grid">
-                <article class="stat-card">
-                    <p class="stat-label">Users</p>
-                    <h2>{{ users|length }}</h2>
+                <article class="stat-card accent-blue">
+                    <div class="stat-icon">👤</div>
+                    <h2>{{ stats.users }}</h2>
+                    <p class="stat-label">USERS</p>
                 </article>
 
-                <article class="stat-card">
-                    <p class="stat-label">Sessions</p>
-                    <h2>{{ workout_sessions|length }}</h2>
+                <article class="stat-card accent-orange">
+                    <div class="stat-icon">🏋️</div>
+                    <h2>{{ stats.sessions }}</h2>
+                    <p class="stat-label">WORKOUTS</p>
                 </article>
 
-                <article class="stat-card">
-                    <p class="stat-label">Exercises</p>
-                    <h2>{{ exercises|length }}</h2>
+                <article class="stat-card accent-green">
+                    <div class="stat-icon">📋</div>
+                    <h2>{{ stats.exercises }}</h2>
+                    <p class="stat-label">EXERCISES</p>
                 </article>
 
-                <article class="stat-card">
-                    <p class="stat-label">Meals</p>
-                    <h2>{{ meals|length }}</h2>
+                <article class="stat-card accent-dark">
+                    <div class="stat-icon">⚠️</div>
+                    <h2>{{ stats.orphan_exercises }}</h2>
+                    <p class="stat-label">ORPHAN EXERCISES</p>
                 </article>
             </section>
 
-            <section class="panel full-width">
+            <section class="dashboard-grid">
+                <article class="panel large-panel">
+                    <div class="panel-header">
+                        <h3>Data Integrity</h3>
+                    </div>
+
+                    <div class="admin-section-body">
+                        {% if orphan_exercises %}
+                            <div class="warning-box">
+                                <strong>Orphan exercise records found</strong>
+                                <p>
+                                    These are exercise records that no longer belong to an existing workout session.
+                                    They can affect prediction accuracy if not removed.
+                                </p>
+                            </div>
+
+                            <form method="POST" action="{{ url_for('cleanup_orphans') }}">
+                                <button type="submit" class="danger-action">
+                                    Delete Orphan Exercise Records
+                                </button>
+                            </form>
+                        {% else %}
+                            <div class="success-box">
+                                <strong>No orphan exercise records detected.</strong>
+                                <p>The database is currently clean.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </article>
+
+                <article class="panel large-panel">
+                    <div class="panel-header">
+                        <h3>Database Summary</h3>
+                    </div>
+
+                    <div class="admin-section-body">
+                        <div class="macro-row">
+                            <span>Total users</span>
+                            <strong>{{ stats.users }}</strong>
+                        </div>
+
+                        <div class="macro-row">
+                            <span>Total workout sessions</span>
+                            <strong>{{ stats.sessions }}</strong>
+                        </div>
+
+                        <div class="macro-row">
+                            <span>Total exercise entries</span>
+                            <strong>{{ stats.exercises }}</strong>
+                        </div>
+
+                        <div class="macro-row">
+                            <span>Total meals</span>
+                            <strong>{{ stats.meals }}</strong>
+                        </div>
+
+                        <div class="macro-row">
+                            <span>Total personal records</span>
+                            <strong>{{ stats.prs }}</strong>
+                        </div>
+                    </div>
+                </article>
+            </section>
+
+            <article class="panel admin-table-panel">
                 <div class="panel-header">
                     <h3>Users</h3>
                 </div>
 
-                <div class="table-wrapper">
-                    <table class="data-table">
+                <div class="admin-table-wrapper">
+                    <table class="admin-table">
                         <thead>
                             <tr>
                                 <th>ID</th>
                                 <th>Username</th>
                                 <th>Admin</th>
+                                <th>Workout Sessions</th>
+                                <th>Meals</th>
+                                <th>Personal Records</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% if users %}
-                                {% for user in users %}
-                                    <tr>
-                                        <td>{{ user.id }}</td>
-                                        <td>{{ user.username }}</td>
-                                        <td>
-                                            <span class="table-badge">
-                                                {{ "Yes" if user.is_admin else "No" }}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                            {% else %}
+                            {% for user in users %}
                                 <tr>
-                                    <td colspan="3" class="empty-table">No users found.</td>
+                                    <td>{{ user.id }}</td>
+                                    <td>{{ user.username }}</td>
+                                    <td>{{ "Yes" if user.is_admin else "No" }}</td>
+                                    <td>{{ user.workout_sessions|length }}</td>
+                                    <td>{{ user.meals|length }}</td>
+                                    <td>{{ user.prs|length }}</td>
                                 </tr>
-                            {% endif %}
+                            {% endfor %}
                         </tbody>
                     </table>
                 </div>
-            </section>
+            </article>
 
-            <section class="panel full-width">
+            <article class="panel admin-table-panel">
                 <div class="panel-header">
                     <h3>Workout Sessions</h3>
                 </div>
 
-                <div class="table-wrapper">
-                    <table class="data-table">
+                <div class="admin-table-wrapper">
+                    <table class="admin-table">
                         <thead>
                             <tr>
                                 <th>ID</th>
                                 <th>User ID</th>
-                                <th>Session Name</th>
+                                <th>Name</th>
                                 <th>Date</th>
-                                <th>Duration</th>
                                 <th>Focus</th>
+                                <th>Duration</th>
+                                <th>Exercises</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% if workout_sessions %}
-                                {% for session in workout_sessions %}
-                                    <tr>
-                                        <td>{{ session.id }}</td>
-                                        <td>{{ session.user_id }}</td>
-                                        <td>{{ session.session_name }}</td>
-                                        <td>{{ session.date }}</td>
-                                        <td>{{ session.duration_minutes }} min</td>
-                                        <td>{{ session.focus }}</td>
-                                    </tr>
-                                {% endfor %}
-                            {% else %}
+                            {% for session in sessions %}
                                 <tr>
-                                    <td colspan="6" class="empty-table">No workout sessions found.</td>
+                                    <td>{{ session.id }}</td>
+                                    <td>{{ session.user_id }}</td>
+                                    <td>{{ session.session_name }}</td>
+                                    <td>{{ session.date }}</td>
+                                    <td>{{ session.focus }}</td>
+                                    <td>{{ session.duration_minutes }} min</td>
+                                    <td>{{ session.exercises|length }}</td>
                                 </tr>
-                            {% endif %}
+                            {% endfor %}
                         </tbody>
                     </table>
                 </div>
-            </section>
+            </article>
 
-            <section class="panel full-width">
+            <article class="panel admin-table-panel">
                 <div class="panel-header">
-                    <h3>Exercises</h3>
+                    <h3>Exercise Entries</h3>
                 </div>
 
-                <div class="table-wrapper">
-                    <table class="data-table">
+                <div class="admin-table-wrapper">
+                    <table class="admin-table">
                         <thead>
                             <tr>
                                 <th>ID</th>
@@ -153,68 +232,21 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% if exercises %}
-                                {% for exercise in exercises %}
-                                    <tr>
-                                        <td>{{ exercise.id }}</td>
-                                        <td>{{ exercise.session_id }}</td>
-                                        <td>{{ exercise.exercise_name }}</td>
-                                        <td>{{ exercise.sets }}</td>
-                                        <td>{{ exercise.reps }}</td>
-                                        <td>{{ exercise.weight }} kg</td>
-                                        <td>{{ exercise.rpe if exercise.rpe is not none else "—" }}</td>
-                                    </tr>
-                                {% endfor %}
-                            {% else %}
+                            {% for exercise in exercises %}
                                 <tr>
-                                    <td colspan="7" class="empty-table">No exercises found.</td>
+                                    <td>{{ exercise.id }}</td>
+                                    <td>{{ exercise.session_id }}</td>
+                                    <td>{{ exercise.exercise_name }}</td>
+                                    <td>{{ exercise.sets }}</td>
+                                    <td>{{ exercise.reps }}</td>
+                                    <td>{{ exercise.weight }} kg</td>
+                                    <td>{{ exercise.rpe }}</td>
                                 </tr>
-                            {% endif %}
+                            {% endfor %}
                         </tbody>
                     </table>
                 </div>
-            </section>
-
-            <section class="panel full-width">
-                <div class="panel-header">
-                    <h3>Meals</h3>
-                </div>
-
-                <div class="table-wrapper">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>User ID</th>
-                                <th>Meal Name</th>
-                                <th>Calories</th>
-                                <th>Protein</th>
-                                <th>Carbs</th>
-                                <th>Fats</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% if meals %}
-                                {% for meal in meals %}
-                                    <tr>
-                                        <td>{{ meal.id }}</td>
-                                        <td>{{ meal.user_id }}</td>
-                                        <td>{{ meal.meal_name }}</td>
-                                        <td>{{ meal.calories }}</td>
-                                        <td>{{ meal.protein }} g</td>
-                                        <td>{{ meal.carbs }} g</td>
-                                        <td>{{ meal.fats }} g</td>
-                                    </tr>
-                                {% endfor %}
-                            {% else %}
-                                <tr>
-                                    <td colspan="7" class="empty-table">No meals found.</td>
-                                </tr>
-                            {% endif %}
-                        </tbody>
-                    </table>
-                </div>
-            </section>
+            </article>
         </main>
     </div>
 </body>
