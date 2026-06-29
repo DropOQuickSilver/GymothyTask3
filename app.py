@@ -11,21 +11,42 @@ from functools import wraps
 from wtforms import SelectField
 from ml.strength_predictor import StrengthPredictor
 
-
-app = Flask(__name__)
 basedir = os.path.abspath(os.path.dirname(__file__))
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'database.db')
-app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "dev-secret-key")
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['TEMPLATES_AUTO_RELOAD'] = True
+app = Flask(__name__)
+
+# Secret key:
+# - Uses Render environment variable in production
+# - Falls back to a local development key when running locally
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-key")
+
+# Database:
+# - Uses PostgreSQL on Render if DATABASE_URL exists
+# - Uses local SQLite database.db when running locally
+database_url = os.environ.get("DATABASE_URL")
+
+if database_url:
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+else:
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(basedir, "database.db")
+
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+
+# Session security settings
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = bool(os.environ.get("RENDER"))
 
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = "login" # type: ignore[assignment]
+login_manager.login_view = "login"  # type: ignore[assignment]
 
 
 
@@ -137,25 +158,31 @@ class LoginForm(FlaskForm):
 class MealForm(FlaskForm):
     meal_name = StringField("Meal Name", validators=[InputRequired(), Length(min=1, max=100)])
     calories = IntegerField("Calories", validators=[InputRequired(), NumberRange(min=0, max=20000)])
-    protein = IntegerField("Protein (g)", validators=[InputRequired(), NumberRange(min=0, max=1000)])
-    carbs = IntegerField("Carbs (g)", validators=[InputRequired(), NumberRange(min=0, max=1000)])
-    fats = IntegerField("Fats (g)", validators=[InputRequired(), NumberRange(min=0, max=1000)])
+    protein = IntegerField("Protein (g)", validators=[InputRequired(), NumberRange(min=0, max=10000)])
+    carbs = IntegerField("Carbs (g)", validators=[InputRequired(), NumberRange(min=0, max=10000)])
+    fats = IntegerField("Fats (g)", validators=[InputRequired(), NumberRange(min=0, max=10000)])
     submit = SubmitField("Save Meal")
 
 
 class WorkoutSessionForm(FlaskForm):
     session_name = StringField("Session Name", validators=[InputRequired(), Length(min=1, max=100)])
     date = StringField("Date", validators=[InputRequired(), Length(min=1, max=30)])
-    duration_minutes = IntegerField("Duration (minutes)", validators=[InputRequired(), NumberRange(min=1, max=600)])
+    duration_minutes = IntegerField(
+        "Duration",
+        validators=[
+            InputRequired(),
+            NumberRange(min=1, max=600, message="Duration must be between 1 and 600 minutes.")
+        ]
+    )
     focus = StringField("Focus", validators=[InputRequired(), Length(min=1, max=100)])
     submit = SubmitField("Save Session")
 
 
 class ExerciseEntryForm(FlaskForm):
     exercise_name = StringField("Exercise Name", validators=[InputRequired(), Length(min=1, max=100)])
-    sets = IntegerField("Sets", validators=[InputRequired(), NumberRange(min=1, max=20)])
-    reps = IntegerField("Reps", validators=[InputRequired(), NumberRange(min=1, max=100)])
-    weight = FloatField("Weight (kg)", validators=[InputRequired(), NumberRange(min=0, max=500)])
+    sets = IntegerField("Sets", validators=[InputRequired(), NumberRange(min=1, max=50)])
+    reps = IntegerField("Reps", validators=[InputRequired(), NumberRange(min=1, max=1000)])
+    weight = FloatField("Weight (kg)", validators=[InputRequired(), NumberRange(min=0, max=50000)])
     rpe = FloatField("RPE", validators=[Optional(), NumberRange(min=1, max=10)])
     submit = SubmitField("Add Exercise")
 
@@ -675,10 +702,8 @@ def admin_debug():
 
 @app.route("/admin/cleanup-orphans", methods=["POST"])
 @login_required
+@admin_required
 def cleanup_orphans():
-    if not current_user.is_admin:
-        abort(403)
-
     deleted_count = delete_orphan_exercises()
     flash(f"Deleted {deleted_count} orphan exercise record(s).")
     return redirect(url_for("admin_debug"))
@@ -701,18 +726,18 @@ def edit_session(session_id):
     return render_template('edit_session.html', form=form, session=session)
 
 
-@app.route('/session/<int:session_id>/delete', methods=['POST'])
+@app.route("/session/<int:session_id>/delete", methods=["POST"])
 @login_required
 def delete_session(session_id):
-    session = WorkoutSession.query.filter_by(
+    workout_session = WorkoutSession.query.filter_by(
         id=session_id,
         user_id=current_user.id
     ).first_or_404()
 
-    for exercise in list(session.exercises):
+    for exercise in list(workout_session.exercises):
         db.session.delete(exercise)
 
-    db.session.delete(session)
+    db.session.delete(workout_session)
     db.session.commit()
 
     flash("Workout session and related exercises deleted successfully.")
@@ -751,3 +776,18 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     app.run(debug=True)
+
+@app.errorhandler(403)
+def forbidden(error):
+    return render_template("403.html"), 403
+
+
+@app.errorhandler(404)
+def not_found(error):
+    return render_template("404.html"), 404
+
+
+@app.errorhandler(500)
+def server_error(error):
+    db.session.rollback()
+    return render_template("500.html"), 500
