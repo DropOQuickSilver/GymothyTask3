@@ -162,29 +162,29 @@ class StrengthPredictor:
             self.metrics = payload.get("metrics", {})
             return self.model
 
-            def predict_next_1rm(self, features):
-                if self.model is None:
-                    self.load_model()
+        def predict_next_1rm(self, features):
+            if self.model is None:
+                self.load_model()
 
-                clean_features = {
-                    "lift_name": str(features["lift_name"]),
-                    "session_number": int(features["session_number"]),
-                    "estimated_1rm": float(features["estimated_1rm"]),
-                    "volume": float(features["volume"]),
-                    "avg_rpe": float(features["avg_rpe"]),
-                    "days_since_last_session": int(features["days_since_last_session"])
-                }
+            clean_features = {
+                "lift_name": str(features["lift_name"]),
+                "session_number": int(features["session_number"]),
+                "estimated_1rm": float(features["estimated_1rm"]),
+                "volume": float(features["volume"]),
+                "avg_rpe": float(features["avg_rpe"]),
+                "days_since_last_session": int(features["days_since_last_session"])
+            }
 
-                input_data = pd.DataFrame([clean_features], columns=self.FEATURE_COLUMNS)
+            input_data = pd.DataFrame([clean_features], columns=self.FEATURE_COLUMNS)
 
-                model = self.model
+            model = self.model
 
-                if model is None:
-                    raise RuntimeError("Strength prediction model could not be loaded.")
+            if model is None:
+                raise RuntimeError("Strength prediction model could not be loaded.")
 
-                prediction = model.predict(input_data)[0]
+            prediction = model.predict(input_data)[0]
 
-                return round(float(prediction), 2)
+            return round(float(prediction), 2)
 
         def interpret_prediction(self, current_1rm, predicted_1rm):
             change = predicted_1rm - current_1rm
