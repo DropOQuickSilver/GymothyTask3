@@ -18,8 +18,13 @@
             </div>
 
             <div class="home-buttons" style="margin-bottom: 20px;">
-                <a href="{{ url_for('add_exercise', session_id=session.id) }}" class="auth-button">Add Exercise</a>
-                <a href="{{ url_for('sessions') }}" class="auth-button">Back to Sessions</a>
+                <a href="{{ url_for('add_exercise', session_id=session.id) }}" class="auth-button">
+                    Add Exercise
+                </a>
+
+                <a href="{{ url_for('sessions') }}" class="auth-button">
+                    Back to Sessions
+                </a>
             </div>
 
             {% if session.exercises %}
@@ -30,6 +35,22 @@
                         <p>Reps: {{ exercise.reps }}</p>
                         <p>Weight: {{ exercise.weight }} kg</p>
                         <p>RPE: {{ exercise.rpe if exercise.rpe is not none else 'N/A' }}</p>
+
+                        <div style="margin-top: 12px;">
+                            <a href="{{ url_for('edit_exercise', exercise_id=exercise.id) }}" class="table-link">
+                                Edit
+                            </a>
+
+                            <form method="POST"
+                                  action="{{ url_for('delete_exercise', exercise_id=exercise.id) }}"
+                                  style="display:inline;"
+                                  onsubmit="return confirm('Delete this exercise?');">
+                                {{ delete_form.hidden_tag() }}
+                                <button type="submit" class="table-link delete-button">
+                                    Delete
+                                </button>
+                            </form>
+                        </div>
                     </div>
                 {% endfor %}
             {% else %}
