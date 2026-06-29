@@ -126,6 +126,7 @@
                                                 action="{{ url_for('delete_meal', meal_id=meal.id) }}"
                                                 style="display:inline;"
                                                 onsubmit="return confirm('Delete this meal?');">
+                                                {{ delete_form.hidden_tag() }}
                                                 <button type="submit" class="table-link delete-button">Delete</button>
                                             </form>
                                         </div>

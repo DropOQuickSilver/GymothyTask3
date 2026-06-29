@@ -109,7 +109,8 @@ class PredictionForm(FlaskForm):
 
     submit = SubmitField("Generate Prediction")
 
-
+class DeleteForm(FlaskForm):
+    submit = SubmitField("Delete")
 
 # Login Manager
 
@@ -157,10 +158,10 @@ class LoginForm(FlaskForm):
 
 class MealForm(FlaskForm):
     meal_name = StringField("Meal Name", validators=[InputRequired(), Length(min=1, max=100)])
-    calories = IntegerField("Calories", validators=[InputRequired(), NumberRange(min=0, max=20000)])
-    protein = IntegerField("Protein (g)", validators=[InputRequired(), NumberRange(min=0, max=10000)])
-    carbs = IntegerField("Carbs (g)", validators=[InputRequired(), NumberRange(min=0, max=10000)])
-    fats = IntegerField("Fats (g)", validators=[InputRequired(), NumberRange(min=0, max=10000)])
+    calories = IntegerField("Calories", validators=[InputRequired(), NumberRange(min=0, max=2000)])
+    protein = IntegerField("Protein (g)", validators=[InputRequired(), NumberRange(min=0, max=1000)])
+    carbs = IntegerField("Carbs (g)", validators=[InputRequired(), NumberRange(min=0, max=1000)])
+    fats = IntegerField("Fats (g)", validators=[InputRequired(), NumberRange(min=0, max=1000)])
     submit = SubmitField("Save Meal")
 
 
@@ -179,10 +180,19 @@ class WorkoutSessionForm(FlaskForm):
 
 
 class ExerciseEntryForm(FlaskForm):
-    exercise_name = StringField("Exercise Name", validators=[InputRequired(), Length(min=1, max=100)])
-    sets = IntegerField("Sets", validators=[InputRequired(), NumberRange(min=1, max=50)])
-    reps = IntegerField("Reps", validators=[InputRequired(), NumberRange(min=1, max=1000)])
-    weight = FloatField("Weight (kg)", validators=[InputRequired(), NumberRange(min=0, max=50000)])
+    exercise_name = SelectField(
+        "Exercise Name",
+        choices=[
+            ("Squat", "Squat"),
+            ("Bench Press", "Bench Press"),
+            ("Deadlift", "Deadlift")
+        ],
+        validators=[InputRequired()]
+    )
+
+    sets = IntegerField("Sets", validators=[InputRequired(), NumberRange(min=1, max=20)])
+    reps = IntegerField("Reps", validators=[InputRequired(), NumberRange(min=1, max=100)])
+    weight = FloatField("Weight (kg)", validators=[InputRequired(), NumberRange(min=0, max=500)])
     rpe = FloatField("RPE", validators=[Optional(), NumberRange(min=1, max=10)])
     submit = SubmitField("Add Exercise")
 
@@ -562,19 +572,32 @@ def prediction():
 @app.route('/sessions')
 @login_required
 def sessions():
-    workout_sessions = WorkoutSession.query.filter_by(user_id=current_user.id).order_by(WorkoutSession.id.desc()).all()
-    return render_template('sessions.html', workout_sessions=workout_sessions)
+    workout_sessions = WorkoutSession.query.filter_by(
+        user_id=current_user.id
+    ).order_by(WorkoutSession.id.desc()).all()
+
+    delete_form = DeleteForm()
+
+    return render_template(
+        'sessions.html',
+        workout_sessions=workout_sessions,
+        delete_form=delete_form
+    )
 
 
 @app.route('/macros')
 @login_required
 def macros():
-    meals = Meal.query.filter_by(user_id=current_user.id).order_by(Meal.id.desc()).all()
+    meals = Meal.query.filter_by(
+        user_id=current_user.id
+    ).order_by(Meal.id.desc()).all()
 
     total_calories = sum(meal.calories for meal in meals)
     total_protein = sum(meal.protein for meal in meals)
     total_carbs = sum(meal.carbs for meal in meals)
     total_fats = sum(meal.fats for meal in meals)
+
+    delete_form = DeleteForm()
 
     return render_template(
         'macros.html',
@@ -582,7 +605,8 @@ def macros():
         total_calories=total_calories,
         total_protein=total_protein,
         total_carbs=total_carbs,
-        total_fats=total_fats
+        total_fats=total_fats,
+        delete_form=delete_form
     )
 
 
@@ -766,16 +790,21 @@ def edit_meal(meal_id):
 @app.route('/meal/<int:meal_id>/delete', methods=['POST'])
 @login_required
 def delete_meal(meal_id):
-    meal = Meal.query.filter_by(id=meal_id, user_id=current_user.id).first_or_404()
+    delete_form = DeleteForm()
+
+    if not delete_form.validate_on_submit():
+        abort(400)
+
+    meal = Meal.query.filter_by(
+        id=meal_id,
+        user_id=current_user.id
+    ).first_or_404()
 
     db.session.delete(meal)
     db.session.commit()
-    return redirect(url_for('macros'))
 
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    app.run(debug=True)
+    flash("Meal deleted successfully.")
+    return redirect(url_for('macros'))
 
 @app.errorhandler(403)
 def forbidden(error):
@@ -791,3 +820,8 @@ def not_found(error):
 def server_error(error):
     db.session.rollback()
     return render_template("500.html"), 500
+
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+    app.run(debug=True)
