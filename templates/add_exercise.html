@@ -12,40 +12,95 @@
             <div class="brand-block">
                 <p class="brand-tag">Gymothy</p>
                 <h1>Add Exercise</h1>
-                <p class="auth-subtext">Add an exercise to {{ session.session_name }}.</p>
+                <p class="auth-subtext">
+                    Add an exercise to {{ session.session_name }}.
+                </p>
             </div>
 
             <form method="POST" class="auth-form">
                 {{ form.hidden_tag() }}
 
                 <div class="form-group">
-                    <label>{{ form.exercise_name.label }}</label>
-                    {{ form.exercise_name(class="form-input") }}
+                    {{ form.exercise_name.label }}
+                    {{ form.exercise_name(class="form-input", id="exercise_name") }}
+
+                    {% for error in form.exercise_name.errors %}
+                        <p class="error-text">{{ error }}</p>
+                    {% endfor %}
+                </div>
+
+                <div class="form-group" id="custom-exercise-wrapper" style="display: none;">
+                    {{ form.custom_exercise_name.label }}
+                    {{ form.custom_exercise_name(class="form-input", id="custom_exercise_name") }}
+
+                    {% for error in form.custom_exercise_name.errors %}
+                        <p class="error-text">{{ error }}</p>
+                    {% endfor %}
                 </div>
 
                 <div class="form-group">
-                    <label>{{ form.sets.label }}</label>
+                    {{ form.sets.label }}
                     {{ form.sets(class="form-input") }}
+
+                    {% for error in form.sets.errors %}
+                        <p class="error-text">{{ error }}</p>
+                    {% endfor %}
                 </div>
 
                 <div class="form-group">
-                    <label>{{ form.reps.label }}</label>
+                    {{ form.reps.label }}
                     {{ form.reps(class="form-input") }}
+
+                    {% for error in form.reps.errors %}
+                        <p class="error-text">{{ error }}</p>
+                    {% endfor %}
                 </div>
 
                 <div class="form-group">
-                    <label>{{ form.weight.label }}</label>
+                    {{ form.weight.label }}
                     {{ form.weight(class="form-input") }}
+
+                    {% for error in form.weight.errors %}
+                        <p class="error-text">{{ error }}</p>
+                    {% endfor %}
                 </div>
 
                 <div class="form-group">
-                    <label>{{ form.rpe.label }}</label>
+                    {{ form.rpe.label }}
                     {{ form.rpe(class="form-input") }}
+
+                    {% for error in form.rpe.errors %}
+                        <p class="error-text">{{ error }}</p>
+                    {% endfor %}
                 </div>
 
                 {{ form.submit(class="auth-button") }}
+
+                <a href="{{ url_for('view_session', session_id=session.id) }}" class="auth-link">
+                    Back to session
+                </a>
             </form>
         </section>
     </main>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const exerciseSelect = document.getElementById("exercise_name");
+            const customExerciseWrapper = document.getElementById("custom-exercise-wrapper");
+
+            function toggleCustomExerciseInput() {
+                if (exerciseSelect.value === "Other") {
+                    customExerciseWrapper.style.display = "block";
+                } else {
+                    customExerciseWrapper.style.display = "none";
+                }
+            }
+
+            if (exerciseSelect && customExerciseWrapper) {
+                toggleCustomExerciseInput();
+                exerciseSelect.addEventListener("change", toggleCustomExerciseInput);
+            }
+        });
+    </script>
 </body>
 </html>

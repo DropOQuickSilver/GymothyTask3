@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Exercise | Gymothy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-icon">G</div>
+                <div>
+                    <h2>Gymothy</h2>
+                    <p>Workout & Nutrition Tracker</p>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <p class="nav-heading">Main</p>
+                <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+                <a href="{{ url_for('sessions') }}" class="nav-link active">Workout Sessions</a>
+                <a href="{{ url_for('macros') }}" class="nav-link">Macros</a>
+                <a href="{{ url_for('prediction') }}" class="nav-link">Strength Prediction</a>
+
+                <p class="nav-heading nav-spacing">Account</p>
+                <a href="{{ url_for('logout') }}" class="nav-link">Log out</a>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <div>
+                    <h1>Edit Exercise</h1>
+                    <p class="topbar-subtext">
+                        Update exercise details for this workout session.
+                    </p>
+                </div>
+
+                <div class="topbar-right">
+                    <div class="user-pill">{{ current_user.username[0]|upper }}</div>
+                    <span class="user-name">{{ current_user.username }}</span>
+                    <a href="{{ url_for('view_session', session_id=exercise.session_id) }}" class="primary-action">
+                        Back to Session
+                    </a>
+                </div>
+            </header>
+
+            <section class="dashboard-grid">
+                <article class="panel large-panel">
+                    <div class="panel-header">
+                        <h3>Exercise Details</h3>
+                    </div>
+
+                    <div class="prediction-card-body">
+                        <form method="POST" class="prediction-form">
+                            {{ form.hidden_tag() }}
+
+                            <div class="form-group">
+                                {{ form.exercise_name.label }}
+                                {{ form.exercise_name(class="form-control", id="exercise_name") }}
+
+                                {% for error in form.exercise_name.errors %}
+                                    <p class="error-text">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+
+                            <div class="form-group" id="custom-exercise-wrapper" style="display: none;">
+                                {{ form.custom_exercise_name.label }}
+                                {{ form.custom_exercise_name(class="form-control", id="custom_exercise_name") }}
+
+                                {% for error in form.custom_exercise_name.errors %}
+                                    <p class="error-text">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+
+                            <div class="form-group">
+                                {{ form.sets.label }}
+                                {{ form.sets(class="form-control") }}
+
+                                {% for error in form.sets.errors %}
+                                    <p class="error-text">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+
+                            <div class="form-group">
+                                {{ form.reps.label }}
+                                {{ form.reps(class="form-control") }}
+
+                                {% for error in form.reps.errors %}
+                                    <p class="error-text">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+
+                            <div class="form-group">
+                                {{ form.weight.label }}
+                                {{ form.weight(class="form-control") }}
+
+                                {% for error in form.weight.errors %}
+                                    <p class="error-text">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+
+                            <div class="form-group">
+                                {{ form.rpe.label }}
+                                {{ form.rpe(class="form-control") }}
+
+                                {% for error in form.rpe.errors %}
+                                    <p class="error-text">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+
+                            <div class="form-actions">
+                                {{ form.submit(class="primary-action", value="Save Changes") }}
+                            </div>
+                        </form>
+                    </div>
+                </article>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const exerciseSelect = document.getElementById("exercise_name");
+            const customExerciseWrapper = document.getElementById("custom-exercise-wrapper");
+
+            function toggleCustomExerciseInput() {
+                if (exerciseSelect.value === "Other") {
+                    customExerciseWrapper.style.display = "block";
+                } else {
+                    customExerciseWrapper.style.display = "none";
+                }
+            }
+
+            if (exerciseSelect && customExerciseWrapper) {
+                toggleCustomExerciseInput();
+                exerciseSelect.addEventListener("change", toggleCustomExerciseInput);
+            }
+        });
+    </script>
+</body>
+</html>

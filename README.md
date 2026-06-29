@@ -11,7 +11,6 @@ Main Features:
  - Workout session creation, viewing, editing and deletion
  - Exercise logging with sets, reps, weight and RPE
  - Meal and macro tracking
- - Personal record tracking
  - Admin/debug page for database inspection
  - Role-based admin access
  - Input validation using Flask-WTF and WTForms
