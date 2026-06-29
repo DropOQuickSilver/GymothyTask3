@@ -1,9 +1,9 @@
-from flask import Flask, render_template, url_for, redirect
+from flask import Flask, render_template, url_for, redirect, url_for, request, flash, abort
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin, login_user, LoginManager, login_required, logout_user, current_user
 import os
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, IntegerField, FloatField, SelectField
+from wtforms import StringField, PasswordField, SubmitField, IntegerField, FloatField, SelectField, form
 from wtforms.validators import InputRequired, Length, ValidationError, NumberRange, Optional
 from flask_bcrypt import Bcrypt
 from flask import abort
@@ -25,7 +25,7 @@ bcrypt = Bcrypt(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = "login"
+login_manager.login_view = "login" # type: ignore[assignment]
 
 
 
@@ -159,18 +159,6 @@ class ExerciseEntryForm(FlaskForm):
     rpe = FloatField("RPE", validators=[Optional(), NumberRange(min=1, max=10)])
     submit = SubmitField("Add Exercise")
 
-class PredictionForm(FlaskForm):
-    lift_name = SelectField(
-        "Lift",
-        choices=[
-            ("Squat", "Squat"),
-            ("Bench Press", "Bench Press"),
-            ("Deadlift", "Deadlift")
-        ],
-        validators=[InputRequired()]
-    )
-    submit = SubmitField("Generate Prediction")
-
 class PredictionLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     lift_name = db.Column(db.String(100), nullable=False)
@@ -196,7 +184,7 @@ def get_user_lift_records(user_id, lift_name):
         .join(WorkoutSession, ExerciseEntry.session_id == WorkoutSession.id)
         .filter(WorkoutSession.user_id == user_id)
         .filter(ExerciseEntry.exercise_name == lift_name)
-        .order_by(WorkoutSession.id.asc())
+        .order_by(WorkoutSession.date.asc(), WorkoutSession.id.asc(), ExerciseEntry.id.asc())
         .all()
     )
 
@@ -397,6 +385,23 @@ def build_projection_chart_points(history_points, projected_1rm):
         "y_ticks": y_ticks
     }
 
+def get_orphan_exercises():
+    return (
+        db.session.query(ExerciseEntry)
+        .outerjoin(WorkoutSession, ExerciseEntry.session_id == WorkoutSession.id)
+        .filter(WorkoutSession.id.is_(None))
+        .all()
+    )
+
+
+def delete_orphan_exercises():
+    orphan_exercises = get_orphan_exercises()
+
+    for exercise in orphan_exercises:
+        db.session.delete(exercise)
+
+    db.session.commit()
+    return len(orphan_exercises)
 # Route Pages
 
 @app.route('/')
@@ -424,7 +429,9 @@ def register():
 
     if form.validate_on_submit():
         hashed_password = bcrypt.generate_password_hash(form.password.data).decode('utf-8')
-        new_user = User(username=form.username.data, password=hashed_password)
+        new_user = User()
+        new_user.username = form.username.data
+        new_user.password = hashed_password
 
         db.session.add(new_user)
         db.session.commit()
@@ -558,14 +565,14 @@ def new_session():
     form = WorkoutSessionForm()
 
     if form.validate_on_submit():
-        session = WorkoutSession(
-            session_name=form.session_name.data,
-            date=form.date.data,
-            duration_minutes=form.duration_minutes.data,
-            focus=form.focus.data,
-            user_id=current_user.id
-        )
-        db.session.add(session)
+        new_session = WorkoutSession()
+        new_session.session_name = form.session_name.data
+        new_session.date = form.date.data
+        new_session.duration_minutes = form.duration_minutes.data
+        new_session.focus = form.focus.data
+        new_session.user_id = current_user.id
+        
+        db.session.add(new_session)
         db.session.commit()
         return redirect(url_for('sessions'))
 
@@ -578,15 +585,15 @@ def add_exercise(session_id):
     form = ExerciseEntryForm()
 
     if form.validate_on_submit():
-        exercise = ExerciseEntry(
-            exercise_name=form.exercise_name.data,
-            sets=form.sets.data,
-            reps=form.reps.data,
-            weight=form.weight.data,
-            rpe=form.rpe.data,
-            session_id=session.id
-        )
-        db.session.add(exercise)
+        new_exercise = ExerciseEntry()
+        new_exercise.exercise_name = form.exercise_name.data
+        new_exercise.sets = form.sets.data
+        new_exercise.reps = form.reps.data
+        new_exercise.weight = form.weight.data
+        new_exercise.rpe = form.rpe.data
+        new_exercise.session_id = session.id
+
+        db.session.add(new_exercise)
         db.session.commit()
         return redirect(url_for('view_session', session_id=session.id))
 
@@ -605,15 +612,15 @@ def add_meal():
     form = MealForm()
 
     if form.validate_on_submit():
-        meal = Meal(
-            meal_name=form.meal_name.data,
-            calories=form.calories.data,
-            protein=form.protein.data,
-            carbs=form.carbs.data,
-            fats=form.fats.data,
-            user_id=current_user.id
-        )
-        db.session.add(meal)
+        new_meal = Meal()
+        new_meal.meal_name = form.meal_name.data
+        new_meal.calories = form.calories.data
+        new_meal.protein = form.protein.data
+        new_meal.carbs = form.carbs.data
+        new_meal.fats = form.fats.data
+        new_meal.user_id = current_user.id
+
+        db.session.add(new_meal)
         db.session.commit()
         return redirect(url_for('macros'))
 
@@ -632,22 +639,49 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
-@app.route('/admin/debug')
+@app.route("/admin/debug")
 @login_required
-@admin_required
 def admin_debug():
-    users = User.query.all()
-    workout_sessions = WorkoutSession.query.all()
-    meals = Meal.query.all()
-    exercises = ExerciseEntry.query.all()
+    if not current_user.is_admin:
+        abort(403)
+
+    users = User.query.order_by(User.id.asc()).all()
+    sessions = WorkoutSession.query.order_by(WorkoutSession.id.desc()).all()
+    exercises = ExerciseEntry.query.order_by(ExerciseEntry.id.desc()).all()
+    meals = Meal.query.order_by(Meal.id.desc()).all()
+    prs = PersonalRecord.query.order_by(PersonalRecord.id.desc()).all()
+
+    orphan_exercises = get_orphan_exercises()
+
+    stats = {
+        "users": User.query.count(),
+        "sessions": WorkoutSession.query.count(),
+        "exercises": ExerciseEntry.query.count(),
+        "meals": Meal.query.count(),
+        "prs": PersonalRecord.query.count(),
+        "orphan_exercises": len(orphan_exercises)
+    }
 
     return render_template(
-        'admin_debug.html',
+        "admin_debug.html",
         users=users,
-        workout_sessions=workout_sessions,
+        sessions=sessions,
+        exercises=exercises,
         meals=meals,
-        exercises=exercises
+        prs=prs,
+        orphan_exercises=orphan_exercises,
+        stats=stats
     )
+
+@app.route("/admin/cleanup-orphans", methods=["POST"])
+@login_required
+def cleanup_orphans():
+    if not current_user.is_admin:
+        abort(403)
+
+    deleted_count = delete_orphan_exercises()
+    flash(f"Deleted {deleted_count} orphan exercise record(s).")
+    return redirect(url_for("admin_debug"))
 
 @app.route('/session/<int:session_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -670,11 +704,19 @@ def edit_session(session_id):
 @app.route('/session/<int:session_id>/delete', methods=['POST'])
 @login_required
 def delete_session(session_id):
-    session = WorkoutSession.query.filter_by(id=session_id, user_id=current_user.id).first_or_404()
+    session = WorkoutSession.query.filter_by(
+        id=session_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    for exercise in list(session.exercises):
+        db.session.delete(exercise)
 
     db.session.delete(session)
     db.session.commit()
-    return redirect(url_for('sessions'))
+
+    flash("Workout session and related exercises deleted successfully.")
+    return redirect(url_for("sessions"))
 
 
 @app.route('/meal/<int:meal_id>/edit', methods=['GET', 'POST'])
