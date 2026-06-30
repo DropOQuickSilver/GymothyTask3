@@ -326,7 +326,7 @@ class PersonalRecordForm(FlaskForm):
 
     weight = FloatField(
         "Weight (kg)",
-        validators=[InputRequired(), NumberRange(min=1, max=500)],
+        validators=[InputRequired(), NumberRange(min=1, max=1000)],
     )
 
     submit = SubmitField("Save Personal Record")
