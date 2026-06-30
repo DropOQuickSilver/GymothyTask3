@@ -278,7 +278,7 @@ class ExerciseEntryForm(FlaskForm):
 
     weight = FloatField(
         "Weight (kg)",
-        validators=[InputRequired(), NumberRange(min=0, max=500)],
+        validators=[InputRequired(), NumberRange(min=0, max=1000)],
     )
 
     rpe = FloatField(
