@@ -21,6 +21,7 @@
                 <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
                 <a href="{{ url_for('sessions') }}" class="nav-link">Workout Sessions</a>
                 <a href="{{ url_for('macros') }}" class="nav-link">Macros</a>
+                <a href="{{ url_for('prs') }}" class="nav-link">Personal Records</a>
                 <a href="{{ url_for('prediction') }}" class="nav-link">Strength Prediction</a>
 
                 <p class="nav-heading nav-spacing">Admin</p>
@@ -98,6 +99,7 @@
                             </div>
 
                             <form method="POST" action="{{ url_for('cleanup_orphans') }}">
+                                {{ delete_form.hidden_tag() }}
                                 <button type="submit" class="danger-action">
                                     Delete Orphan Exercise Records
                                 </button>
@@ -234,13 +236,10 @@
                         <tbody>
                             {% for exercise in exercises %}
                                 <tr>
-                                    <td>{{ exercise.id }}</td>
-                                    <td>{{ exercise.session_id }}</td>
-                                    <td>{{ exercise.exercise_name }}</td>
                                     <td>{{ exercise.sets }}</td>
                                     <td>{{ exercise.reps }}</td>
                                     <td>{{ exercise.weight }} kg</td>
-                                    <td>{{ exercise.rpe }}</td>
+                                    <td>{{ exercise.rpe if exercise.rpe is not none else "N/A" }}</td>
                                 </tr>
                             {% endfor %}
                         </tbody>
