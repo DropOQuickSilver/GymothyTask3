@@ -10,7 +10,7 @@ from wtforms import (StringField, PasswordField, SubmitField, IntegerField, Floa
 from wtforms.validators import (InputRequired, Length, ValidationError, NumberRange, Optional)
 
 from ml.strength_predictor import StrengthPredictor
-
+from sqlalchemy import inspect, text
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
@@ -550,6 +550,9 @@ def delete_orphan_exercises():
 
 @app.route("/")
 def home():
+    if current_user.is_authenticated:
+        return redirect(url_for("dashboard"))
+
     return render_template("home.html")
 
 
@@ -704,8 +707,10 @@ def prediction():
                     db.session.commit()
 
             except FileNotFoundError:
+                db.session.rollback()
                 error = "The prediction model has not been trained yet."
             except Exception as e:
+                db.session.rollback()
                 error = f"Prediction could not be generated: {str(e)}"
 
     return render_template(
@@ -1079,6 +1084,20 @@ def cleanup_orphans():
     flash(f"Deleted {deleted_count} orphan exercise record(s).")
     return redirect(url_for("admin_debug"))
 
+def ensure_database_schema():
+    inspector = inspect(db.engine)
+
+    if "prediction_log" in inspector.get_table_names():
+        columns = [
+            column["name"]
+            for column in inspector.get_columns("prediction_log")
+        ]
+
+        if "created_at" not in columns:
+            with db.engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE prediction_log ADD COLUMN created_at DATETIME")
+                )
 
 # Error Handlers
 
@@ -1100,6 +1119,7 @@ def server_error(error):
 
 with app.app_context():
     db.create_all()
+    ensure_database_schema()
 
 
 if __name__ == "__main__":

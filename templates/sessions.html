@@ -75,8 +75,11 @@
                                             <form method="POST"
                                                 action="{{ url_for('delete_session', session_id=session.id) }}"
                                                 style="display:inline;"
-                                                onsubmit="return confirm('Delete this session?');">
-                                                <button type="submit" class="table-link delete-button">Delete</button>
+                                                onsubmit="return confirm('Delete this session? This will also delete its exercises.');">
+                                                {{ delete_form.hidden_tag() }}
+                                                <button type="submit" class="table-link delete-button">
+                                                    Delete
+                                                </button>
                                             </form>
                                         </td>
                                     </tr>
