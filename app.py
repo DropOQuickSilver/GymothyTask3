@@ -1,16 +1,17 @@
 import os
 from functools import wraps
 
-from flask import Flask, render_template, url_for, redirect, flash, abort, request 
+from flask import Flask, render_template, url_for, redirect, flash, abort, request
 from flask_bcrypt import Bcrypt
 from flask_login import (UserMixin, login_user, LoginManager, login_required, logout_user, current_user,)
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import FlaskForm
 from wtforms import (StringField, PasswordField, SubmitField, IntegerField, FloatField, SelectField,)
-from wtforms.validators import (InputRequired, Length, ValidationError, NumberRange, Optional)
+from wtforms.validators import (InputRequired, Length, ValidationError, NumberRange, Optional, Regexp,)
+from sqlalchemy import inspect, text
 
 from ml.strength_predictor import StrengthPredictor
-from sqlalchemy import inspect, text
+
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
@@ -133,7 +134,7 @@ class Meal(db.Model):
 class PersonalRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     lift_name = db.Column(db.String(100), nullable=False)
-    weight = db.Column(db.Integer, nullable=False, default=0)
+    weight = db.Column(db.Float, nullable=False, default=0)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
 
 
@@ -223,7 +224,13 @@ class WorkoutSessionForm(FlaskForm):
 
     date = StringField(
         "Date",
-        validators=[InputRequired(), Length(min=1, max=30)],
+        validators=[
+            InputRequired(),
+            Regexp(
+                r"^\d{4}-\d{2}-\d{2}$",
+                message="Date must be in YYYY-MM-DD format.",
+            ),
+        ],
     )
 
     duration_minutes = IntegerField(
@@ -244,6 +251,7 @@ class WorkoutSessionForm(FlaskForm):
     )
 
     submit = SubmitField("Save Session")
+
 
 STANDARD_EXERCISES = ["Squat", "Bench Press", "Deadlift"]
 
@@ -290,7 +298,11 @@ class ExerciseEntryForm(FlaskForm):
 
     def validate_custom_exercise_name(self, custom_exercise_name):
         if self.exercise_name.data == "Other":
-            typed_name = custom_exercise_name.data.strip() if custom_exercise_name.data else ""
+            typed_name = (
+                custom_exercise_name.data.strip()
+                if custom_exercise_name.data
+                else ""
+            )
 
             if not typed_name:
                 raise ValidationError("Please enter the name of the other exercise.")
@@ -312,6 +324,7 @@ class PredictionForm(FlaskForm):
 
 class DeleteForm(FlaskForm):
     submit = SubmitField("Delete")
+
 
 class PersonalRecordForm(FlaskForm):
     lift_name = SelectField(
@@ -357,6 +370,7 @@ def get_exercise_name_from_form(form):
         return form.custom_exercise_name.data.strip()
 
     return form.exercise_name.data
+
 
 def calculate_estimated_1rm(weight, reps):
     if weight <= 0 or reps <= 0:
@@ -443,6 +457,16 @@ def calculate_three_week_projection(history_points, weeks_ahead=3):
     average_weekly_change = sum(recent_changes) / len(recent_changes)
 
     current_1rm = estimated_maxes[-1]
+
+    # Caps projection change to +/- 5% per week.
+    # This prevents unrealistic predictions caused by one outlier workout.
+    max_weekly_change = current_1rm * 0.05
+
+    average_weekly_change = max(
+        -max_weekly_change,
+        min(average_weekly_change, max_weekly_change),
+    )
+
     projected_1rm = current_1rm + (average_weekly_change * weeks_ahead)
 
     total_change = projected_1rm - current_1rm
@@ -783,6 +807,7 @@ def macros():
         delete_form=delete_form,
     )
 
+
 @app.route("/prs")
 @login_required
 def prs():
@@ -827,7 +852,10 @@ def edit_pr(pr_id):
     personal_record = PersonalRecord.query.filter_by(
         id=pr_id,
         user_id=current_user.id,
-    ).first_or_404()
+    ).first()
+
+    if personal_record is None:
+        abort(404)
 
     form = PersonalRecordForm(obj=personal_record)
 
@@ -858,13 +886,17 @@ def delete_pr(pr_id):
     personal_record = PersonalRecord.query.filter_by(
         id=pr_id,
         user_id=current_user.id,
-    ).first_or_404()
+    ).first()
+
+    if personal_record is None:
+        abort(404)
 
     db.session.delete(personal_record)
     db.session.commit()
 
     flash("Personal record deleted successfully.")
     return redirect(url_for("prs"))
+
 
 @app.route("/new-session", methods=["GET", "POST"])
 @login_required
@@ -894,7 +926,10 @@ def view_session(session_id):
     workout_session = WorkoutSession.query.filter_by(
         id=session_id,
         user_id=current_user.id,
-    ).first_or_404()
+    ).first()
+
+    if workout_session is None:
+        abort(404)
 
     delete_form = DeleteForm()
 
@@ -911,7 +946,10 @@ def add_exercise(session_id):
     workout_session = WorkoutSession.query.filter_by(
         id=session_id,
         user_id=current_user.id,
-    ).first_or_404()
+    ).first()
+
+    if workout_session is None:
+        abort(404)
 
     form = ExerciseEntryForm()
 
@@ -1003,13 +1041,17 @@ def delete_exercise(exercise_id):
     flash("Exercise deleted successfully.")
     return redirect(url_for("view_session", session_id=session_id))
 
+
 @app.route("/session/<int:session_id>/edit", methods=["GET", "POST"])
 @login_required
 def edit_session(session_id):
     workout_session = WorkoutSession.query.filter_by(
         id=session_id,
         user_id=current_user.id,
-    ).first_or_404()
+    ).first()
+
+    if workout_session is None:
+        abort(404)
 
     form = WorkoutSessionForm(obj=workout_session)
 
@@ -1042,7 +1084,10 @@ def delete_session(session_id):
     workout_session = WorkoutSession.query.filter_by(
         id=session_id,
         user_id=current_user.id,
-    ).first_or_404()
+    ).first()
+
+    if workout_session is None:
+        abort(404)
 
     for exercise in list(workout_session.exercises):
         db.session.delete(exercise)
@@ -1083,7 +1128,10 @@ def edit_meal(meal_id):
     meal = Meal.query.filter_by(
         id=meal_id,
         user_id=current_user.id,
-    ).first_or_404()
+    ).first()
+
+    if meal is None:
+        abort(404)
 
     form = MealForm(obj=meal)
 
@@ -1117,7 +1165,10 @@ def delete_meal(meal_id):
     meal = Meal.query.filter_by(
         id=meal_id,
         user_id=current_user.id,
-    ).first_or_404()
+    ).first()
+
+    if meal is None:
+        abort(404)
 
     db.session.delete(meal)
     db.session.commit()
@@ -1177,6 +1228,7 @@ def admin_debug():
         delete_form=delete_form,
     )
 
+
 @app.route("/admin/cleanup-orphans", methods=["POST"])
 @login_required
 @admin_required
@@ -1190,6 +1242,7 @@ def cleanup_orphans():
 
     flash(f"Deleted {deleted_count} orphan exercise record(s).")
     return redirect(url_for("admin_debug"))
+
 
 def ensure_database_schema():
     inspector = inspect(db.engine)
@@ -1205,6 +1258,7 @@ def ensure_database_schema():
                 connection.execute(
                     text("ALTER TABLE prediction_log ADD COLUMN created_at DATETIME")
                 )
+
 
 # Error Handlers
 
@@ -1231,4 +1285,3 @@ with app.app_context():
 
 if __name__ == "__main__":
     app.run(debug=True)
-# Final app.py formatting check
