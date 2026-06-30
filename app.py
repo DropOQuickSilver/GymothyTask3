@@ -313,6 +313,24 @@ class PredictionForm(FlaskForm):
 class DeleteForm(FlaskForm):
     submit = SubmitField("Delete")
 
+class PersonalRecordForm(FlaskForm):
+    lift_name = SelectField(
+        "Lift",
+        choices=[
+            ("Squat", "Squat"),
+            ("Bench Press", "Bench Press"),
+            ("Deadlift", "Deadlift"),
+        ],
+        validators=[InputRequired()],
+    )
+
+    weight = FloatField(
+        "Weight (kg)",
+        validators=[InputRequired(), NumberRange(min=1, max=500)],
+    )
+
+    submit = SubmitField("Save Personal Record")
+
 
 # Login Manager / Access Control
 
@@ -765,6 +783,88 @@ def macros():
         delete_form=delete_form,
     )
 
+@app.route("/prs")
+@login_required
+def prs():
+    personal_records = (
+        PersonalRecord.query.filter_by(user_id=current_user.id)
+        .order_by(PersonalRecord.id.desc())
+        .all()
+    )
+
+    delete_form = DeleteForm()
+
+    return render_template(
+        "prs.html",
+        personal_records=personal_records,
+        delete_form=delete_form,
+    )
+
+
+@app.route("/pr/new", methods=["GET", "POST"])
+@login_required
+def new_pr():
+    form = PersonalRecordForm()
+
+    if form.validate_on_submit():
+        new_record = PersonalRecord()
+        new_record.lift_name = form.lift_name.data
+        new_record.weight = form.weight.data
+        new_record.user_id = current_user.id
+
+        db.session.add(new_record)
+        db.session.commit()
+
+        flash("Personal record added successfully.")
+        return redirect(url_for("prs"))
+
+    return render_template("new_pr.html", form=form)
+
+
+@app.route("/pr/<int:pr_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_pr(pr_id):
+    personal_record = PersonalRecord.query.filter_by(
+        id=pr_id,
+        user_id=current_user.id,
+    ).first_or_404()
+
+    form = PersonalRecordForm(obj=personal_record)
+
+    if form.validate_on_submit():
+        personal_record.lift_name = form.lift_name.data
+        personal_record.weight = form.weight.data
+
+        db.session.commit()
+
+        flash("Personal record updated successfully.")
+        return redirect(url_for("prs"))
+
+    return render_template(
+        "edit_pr.html",
+        form=form,
+        personal_record=personal_record,
+    )
+
+
+@app.route("/pr/<int:pr_id>/delete", methods=["POST"])
+@login_required
+def delete_pr(pr_id):
+    delete_form = DeleteForm()
+
+    if not delete_form.validate_on_submit():
+        abort(400)
+
+    personal_record = PersonalRecord.query.filter_by(
+        id=pr_id,
+        user_id=current_user.id,
+    ).first_or_404()
+
+    db.session.delete(personal_record)
+    db.session.commit()
+
+    flash("Personal record deleted successfully.")
+    return redirect(url_for("prs"))
 
 @app.route("/new-session", methods=["GET", "POST"])
 @login_required
@@ -845,8 +945,11 @@ def edit_exercise(exercise_id):
         .join(WorkoutSession, ExerciseEntry.session_id == WorkoutSession.id)
         .filter(ExerciseEntry.id == exercise_id)
         .filter(WorkoutSession.user_id == current_user.id)
-        .first_or_404()
+        .first()
     )
+
+    if exercise is None:
+        abort(404)
 
     form = ExerciseEntryForm(obj=exercise)
 
@@ -886,8 +989,11 @@ def delete_exercise(exercise_id):
         .join(WorkoutSession, ExerciseEntry.session_id == WorkoutSession.id)
         .filter(ExerciseEntry.id == exercise_id)
         .filter(WorkoutSession.user_id == current_user.id)
-        .first_or_404()
+        .first()
     )
+
+    if exercise is None:
+        abort(404)
 
     session_id = exercise.session_id
 
@@ -896,7 +1002,6 @@ def delete_exercise(exercise_id):
 
     flash("Exercise deleted successfully.")
     return redirect(url_for("view_session", session_id=session_id))
-
 
 @app.route("/session/<int:session_id>/edit", methods=["GET", "POST"])
 @login_required
@@ -1057,6 +1162,8 @@ def admin_debug():
         "orphan_exercises": len(orphan_exercises),
     }
 
+    delete_form = DeleteForm()
+
     return render_template(
         "admin_debug.html",
         users=users,
@@ -1067,8 +1174,8 @@ def admin_debug():
         prediction_logs=prediction_logs,
         orphan_exercises=orphan_exercises,
         stats=stats,
+        delete_form=delete_form,
     )
-
 
 @app.route("/admin/cleanup-orphans", methods=["POST"])
 @login_required
