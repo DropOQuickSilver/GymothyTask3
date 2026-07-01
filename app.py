@@ -3,38 +3,50 @@ from datetime import datetime
 from functools import wraps
 
 from flask import Flask, render_template, url_for, redirect, flash, abort, request
-from flask_bcrypt import Bcrypt
-from flask_login import (UserMixin, login_user, LoginManager, login_required, logout_user, current_user,)
-from flask_sqlalchemy import SQLAlchemy
-from flask_wtf import FlaskForm
-from wtforms import (StringField, PasswordField, SubmitField, IntegerField, FloatField, SelectField,)
-from wtforms.validators import (InputRequired, Length, ValidationError, NumberRange, Optional, Regexp,)
+from flask_login import login_user, login_required, logout_user, current_user
 from sqlalchemy import inspect, text, func
 
+from extensions import db, bcrypt, login_manager, get_redis_client, init_extensions
+from forms import (
+    RegisterForm,
+    LoginForm,
+    MealForm,
+    WorkoutSessionForm,
+    ExerciseEntryForm,
+    PredictionForm,
+    DeleteForm,
+    PersonalRecordForm,
+    STANDARD_EXERCISES,
+)
+from models import (
+    User,
+    WorkoutSession,
+    ExerciseEntry,
+    Meal,
+    PersonalRecord,
+    PredictionLog,
+)
 from ml.strength_predictor import StrengthPredictor
-
-# Simple in-memory login attempt tracker (use Redis for production)
-LOGIN_ATTEMPTS = {}
-MAX_LOGIN_ATTEMPTS = int(os.environ.get("MAX_LOGIN_ATTEMPTS", 5))
-LOGIN_WINDOW_SECONDS = int(os.environ.get("LOGIN_WINDOW_SECONDS", 300))
-LOCKOUT_SECONDS = int(os.environ.get("LOCKOUT_SECONDS", 900))
 
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
 app = Flask(__name__)
 
-# Debug row limit for admin troubleshooting panels.
 DEBUG_ROW_LIMIT = int(os.environ.get("DEBUG_ROW_LIMIT", 50))
+LOGIN_ATTEMPTS = {}
+MAX_LOGIN_ATTEMPTS = int(os.environ.get("MAX_LOGIN_ATTEMPTS", "3"))
+LOGIN_WINDOW_SECONDS = int(os.environ.get("LOGIN_WINDOW_SECONDS", "300"))
+LOCKOUT_SECONDS = int(os.environ.get("LOCKOUT_SECONDS", "180"))
 
-# Secret key:
-# - Uses Render environment variable in production
-# - Falls back to a local development key when running locally
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-key")
 
-# Database:
-# - Uses PostgreSQL on Render if DATABASE_URL exists
-# - Uses local SQLite database.db when running locally
+secret_key = os.environ.get("SECRET_KEY")
+
+if os.environ.get("RENDER") and not secret_key:
+    raise RuntimeError("SECRET_KEY must be set in production.")
+
+app.config["SECRET_KEY"] = secret_key or "dev-secret-key"
+
 database_url = os.environ.get("DATABASE_URL")
 
 if database_url:
@@ -50,311 +62,11 @@ else:
 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["TEMPLATES_AUTO_RELOAD"] = True
-
-# Session security settings
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = bool(os.environ.get("RENDER"))
 
-db = SQLAlchemy(app)
-bcrypt = Bcrypt(app)
-
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = "login"  # type: ignore[assignment]
-
-
-# Database Models
-
-class User(db.Model, UserMixin):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(60), nullable=False, unique=True)
-    password = db.Column(db.String(200), nullable=False)
-    is_admin = db.Column(db.Boolean, default=False, nullable=False)
-    # New role column provides a clearer extensible role system (e.g. 'user','admin','viewer')
-    role = db.Column(db.String(30), nullable=False, default="user")
-
-    workout_sessions = db.relationship(
-        "WorkoutSession",
-        backref="user",
-        lazy=True,
-        cascade="all, delete-orphan",
-    )
-
-    meals = db.relationship(
-        "Meal",
-        backref="user",
-        lazy=True,
-        cascade="all, delete-orphan",
-    )
-
-    prs = db.relationship(
-        "PersonalRecord",
-        backref="user",
-        lazy=True,
-        cascade="all, delete-orphan",
-    )
-
-    prediction_logs = db.relationship(
-        "PredictionLog",
-        backref="user",
-        lazy=True,
-        cascade="all, delete-orphan",
-    )
-
-
-class WorkoutSession(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    session_name = db.Column(db.String(100), nullable=False)
-    date = db.Column(db.String(30), nullable=False)
-    duration_minutes = db.Column(db.Integer, nullable=False, default=0)
-    focus = db.Column(db.String(100), nullable=False, default="General")
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-
-    exercises = db.relationship(
-        "ExerciseEntry",
-        backref="session",
-        lazy=True,
-        cascade="all, delete-orphan",
-    )
-
-
-class ExerciseEntry(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    exercise_name = db.Column(db.String(100), nullable=False)
-    sets = db.Column(db.Integer, nullable=False, default=0)
-    reps = db.Column(db.Integer, nullable=False, default=0)
-    weight = db.Column(db.Float, nullable=False, default=0)
-    rpe = db.Column(db.Float, nullable=True)
-    session_id = db.Column(
-        db.Integer,
-        db.ForeignKey("workout_session.id"),
-        nullable=False,
-    )
-
-
-class Meal(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    meal_name = db.Column(db.String(100), nullable=False)
-    calories = db.Column(db.Integer, nullable=False, default=0)
-    protein = db.Column(db.Integer, nullable=False, default=0)
-    carbs = db.Column(db.Integer, nullable=False, default=0)
-    fats = db.Column(db.Integer, nullable=False, default=0)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-
-
-class PersonalRecord(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    lift_name = db.Column(db.String(100), nullable=False)
-    weight = db.Column(db.Float, nullable=False, default=0)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-
-
-class PredictionLog(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    lift_name = db.Column(db.String(100), nullable=False)
-    current_1rm = db.Column(db.Float, nullable=False)
-    predicted_1rm = db.Column(db.Float, nullable=False)
-    trend = db.Column(db.String(50), nullable=False)
-    records_used = db.Column(db.Integer, nullable=False)
-    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-
-
-# Forms
-
-class RegisterForm(FlaskForm):
-    username = StringField(
-        validators=[InputRequired(), Length(min=4, max=60)],
-        render_kw={"placeholder": "Username"},
-    )
-
-    password = PasswordField(
-        validators=[InputRequired(), Length(min=4, max=60)],
-        render_kw={"placeholder": "Password"},
-    )
-
-    submit = SubmitField("Register")
-
-    def validate_username(self, username):
-        existing_user = User.query.filter_by(username=username.data).first()
-
-        if existing_user:
-            raise ValidationError(
-                "That username already exists. Please choose a different one."
-            )
-
-
-class LoginForm(FlaskForm):
-    username = StringField(
-        validators=[InputRequired(), Length(min=4, max=60)],
-        render_kw={"placeholder": "Username"},
-    )
-
-    password = PasswordField(
-        validators=[InputRequired(), Length(min=4, max=60)],
-        render_kw={"placeholder": "Password"},
-    )
-
-    submit = SubmitField("Login")
-
-
-class MealForm(FlaskForm):
-    meal_name = StringField(
-        "Meal Name",
-        validators=[InputRequired(), Length(min=1, max=100)],
-    )
-
-    calories = IntegerField(
-        "Calories",
-        validators=[InputRequired(), NumberRange(min=0, max=10000)],
-    )
-
-    protein = IntegerField(
-        "Protein (g)",
-        validators=[InputRequired(), NumberRange(min=0, max=1000)],
-    )
-
-    carbs = IntegerField(
-        "Carbs (g)",
-        validators=[InputRequired(), NumberRange(min=0, max=1000)],
-    )
-
-    fats = IntegerField(
-        "Fats (g)",
-        validators=[InputRequired(), NumberRange(min=0, max=1000)],
-    )
-
-    submit = SubmitField("Save Meal")
-
-
-class WorkoutSessionForm(FlaskForm):
-    session_name = StringField(
-        "Session Name",
-        validators=[InputRequired(), Length(min=1, max=100)],
-    )
-
-    date = StringField(
-        "Date",
-        validators=[
-            InputRequired(),
-            Regexp(
-                r"^\d{4}-\d{2}-\d{2}$",
-                message="Date must be in YYYY-MM-DD format.",
-            ),
-        ],
-    )
-
-    duration_minutes = IntegerField(
-        "Duration",
-        validators=[
-            InputRequired(),
-            NumberRange(
-                min=1,
-                max=600,
-                message="Duration must be between 1 and 600 minutes.",
-            ),
-        ],
-    )
-
-    focus = StringField(
-        "Focus",
-        validators=[InputRequired(), Length(min=1, max=100)],
-    )
-
-    submit = SubmitField("Save Session")
-
-
-STANDARD_EXERCISES = ["Squat", "Bench Press", "Deadlift"]
-
-
-class ExerciseEntryForm(FlaskForm):
-    exercise_name = SelectField(
-        "Exercise Name",
-        choices=[
-            ("Squat", "Squat"),
-            ("Bench Press", "Bench Press"),
-            ("Deadlift", "Deadlift"),
-            ("Other", "Other"),
-        ],
-        validators=[InputRequired()],
-    )
-
-    custom_exercise_name = StringField(
-        "Other Exercise Name",
-        validators=[Optional(), Length(max=100)],
-        render_kw={"placeholder": "e.g. Lat Pulldown, Leg Press, Shoulder Press"},
-    )
-
-    sets = IntegerField(
-        "Sets",
-        validators=[InputRequired(), NumberRange(min=1, max=20)],
-    )
-
-    reps = IntegerField(
-        "Reps",
-        validators=[InputRequired(), NumberRange(min=1, max=100)],
-    )
-
-    weight = FloatField(
-        "Weight (kg)",
-        validators=[InputRequired(), NumberRange(min=0, max=1000)],
-    )
-
-    rpe = FloatField(
-        "RPE",
-        validators=[Optional(), NumberRange(min=1, max=10)],
-    )
-
-    submit = SubmitField("Add Exercise")
-
-    def validate_custom_exercise_name(self, custom_exercise_name):
-        if self.exercise_name.data == "Other":
-            typed_name = (
-                custom_exercise_name.data.strip()
-                if custom_exercise_name.data
-                else ""
-            )
-
-            if not typed_name:
-                raise ValidationError("Please enter the name of the other exercise.")
-
-
-class PredictionForm(FlaskForm):
-    lift_name = SelectField(
-        "Lift",
-        choices=[
-            ("Squat", "Squat"),
-            ("Bench Press", "Bench Press"),
-            ("Deadlift", "Deadlift"),
-        ],
-        validators=[InputRequired()],
-    )
-
-    submit = SubmitField("Generate Prediction")
-
-
-class DeleteForm(FlaskForm):
-    submit = SubmitField("Delete")
-
-
-class PersonalRecordForm(FlaskForm):
-    lift_name = SelectField(
-        "Lift",
-        choices=[
-            ("Squat", "Squat"),
-            ("Bench Press", "Bench Press"),
-            ("Deadlift", "Deadlift"),
-        ],
-        validators=[InputRequired()],
-    )
-
-    weight = FloatField(
-        "Weight (kg)",
-        validators=[InputRequired(), NumberRange(min=1, max=1000)],
-    )
-
-    submit = SubmitField("Save Personal Record")
+init_extensions(app)
 
 
 # Login Manager / Access Control
@@ -675,53 +387,207 @@ def home():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     form = LoginForm()
+    redis_client = get_redis_client()
 
-    # handle lockout logic based on username
-    username = form.username.data if request.method == "POST" else None
+    submitted_username = ""
+    username_key = ""
+
+    if request.method == "POST":
+        submitted_username = (request.form.get("username") or "").strip()
+        username_key = submitted_username.lower()
+
+    # Locks by IP/device as well, so changing username does not bypass lockout.
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+    else:
+        client_ip = request.remote_addr or "unknown"
+
+    ip_key = f"ip:{client_ip}"
     now_ts = datetime.utcnow().timestamp()
 
-    if username:
-        entry = LOGIN_ATTEMPTS.get(username, {"count": 0, "first": now_ts, "locked_until": None})
-        # if locked, inform the user
-        locked_until = entry.get("locked_until")
-        if locked_until and now_ts < locked_until:
-            flash("Account temporarily locked due to too many failed login attempts. Try again later.")
-            return render_template("login.html", form=form)
+    def lock_message(remaining_seconds):
+        remaining_minutes = max(1, round(remaining_seconds / 60))
+        return (
+            f"Too many failed login attempts. You are blocked for "
+            f"about {remaining_minutes} minute(s). Please try again later."
+        )
+
+    # Check lockout before validating the password.
+    if request.method == "POST":
+        if redis_client:
+            try:
+                redis_username_lock_key = f"login:user:{username_key}:locked"
+                redis_ip_lock_key = f"login:{ip_key}:locked"
+
+                if username_key and redis_client.get(redis_username_lock_key):
+                    remaining_seconds = redis_client.ttl(redis_username_lock_key)
+
+                    if remaining_seconds is None or remaining_seconds < 0:
+                        remaining_seconds = LOCKOUT_SECONDS
+
+                    flash(lock_message(remaining_seconds))
+                    return render_template("login.html", form=form)
+
+                if redis_client.get(redis_ip_lock_key):
+                    remaining_seconds = redis_client.ttl(redis_ip_lock_key)
+
+                    if remaining_seconds is None or remaining_seconds < 0:
+                        remaining_seconds = LOCKOUT_SECONDS
+
+                    flash(lock_message(remaining_seconds))
+                    return render_template("login.html", form=form)
+
+            except Exception:
+                redis_client = None
+
+        if not redis_client:
+            for key in [f"user:{username_key}", ip_key]:
+                if key == "user:":
+                    continue
+
+                entry = LOGIN_ATTEMPTS.get(key)
+
+                if entry:
+                    locked_until = entry.get("locked_until")
+
+                    if locked_until and now_ts < locked_until:
+                        remaining_seconds = int(locked_until - now_ts)
+                        flash(lock_message(remaining_seconds))
+                        return render_template("login.html", form=form)
+
+                    if locked_until and now_ts >= locked_until:
+                        LOGIN_ATTEMPTS.pop(key, None)
 
     if form.validate_on_submit():
-        user = User.query.filter_by(username=form.username.data).first()
+        user = User.query.filter_by(username=submitted_username).first()
 
         if user and bcrypt.check_password_hash(user.password, form.password.data):
-            # success -> clear attempts and login
-            if username in LOGIN_ATTEMPTS:
-                del LOGIN_ATTEMPTS[username]
+            # Successful login clears failed attempts for this username and IP/device.
+            if redis_client:
+                try:
+                    redis_client.delete(f"login:user:{username_key}:count")
+                    redis_client.delete(f"login:user:{username_key}:locked")
+                    redis_client.delete(f"login:{ip_key}:count")
+                    redis_client.delete(f"login:{ip_key}:locked")
+                except Exception:
+                    pass
+
+            LOGIN_ATTEMPTS.pop(f"user:{username_key}", None)
+            LOGIN_ATTEMPTS.pop(ip_key, None)
+
             login_user(user)
             return redirect(url_for("dashboard"))
 
-        # failed login -> record attempt
-        entry = LOGIN_ATTEMPTS.get(username, {"count": 0, "first": now_ts, "locked_until": None})
-        # reset window if past
-        if now_ts - entry.get("first", now_ts) > LOGIN_WINDOW_SECONDS:
-            entry = {"count": 0, "first": now_ts, "locked_until": None}
+        # Failed login attempt using Redis.
+        if redis_client:
+            try:
+                failed_keys = []
 
-        entry["count"] = entry.get("count", 0) + 1
-        if entry["count"] >= MAX_LOGIN_ATTEMPTS:
-            entry["locked_until"] = now_ts + LOCKOUT_SECONDS
-            flash("Too many failed login attempts. Account locked temporarily.")
-        else:
-            attempts_left = MAX_LOGIN_ATTEMPTS - entry["count"]
-            flash(f"Invalid username or password. {attempts_left} attempt(s) remaining.")
+                if username_key:
+                    failed_keys.append(f"user:{username_key}")
 
-        LOGIN_ATTEMPTS[username] = entry
+                failed_keys.append(ip_key)
+
+                locked_now = False
+
+                for key in failed_keys:
+                    count_key = f"login:{key}:count"
+                    locked_key = f"login:{key}:locked"
+
+                    count = redis_client.incr(count_key)
+
+                    if count == 1:
+                        redis_client.expire(count_key, LOGIN_WINDOW_SECONDS)
+
+                    if count >= MAX_LOGIN_ATTEMPTS:
+                        redis_client.setex(locked_key, LOCKOUT_SECONDS, "1")
+                        locked_now = True
+
+                if locked_now:
+                    flash(lock_message(LOCKOUT_SECONDS))
+                else:
+                    username_count = 0
+
+                    if username_key:
+                        username_count = int(
+                            redis_client.get(f"login:user:{username_key}:count") or 0
+                        )
+
+                    ip_count = int(redis_client.get(f"login:{ip_key}:count") or 0)
+                    highest_count = max(username_count, ip_count)
+                    attempts_left = max(0, MAX_LOGIN_ATTEMPTS - highest_count)
+
+                    flash(
+                        f"Invalid username or password. "
+                        f"{attempts_left} attempt(s) remaining."
+                    )
+
+            except Exception:
+                redis_client = None
+
+        # Failed login attempt using local in-memory fallback.
+        if not redis_client:
+            failed_keys = []
+
+            if username_key:
+                failed_keys.append(f"user:{username_key}")
+
+            failed_keys.append(ip_key)
+
+            locked_now = False
+            highest_count = 0
+
+            for key in failed_keys:
+                entry = LOGIN_ATTEMPTS.get(
+                    key,
+                    {
+                        "count": 0,
+                        "first": now_ts,
+                        "locked_until": None,
+                    },
+                )
+
+                # Reset the window if the first failed attempt was too long ago.
+                if now_ts - entry.get("first", now_ts) > LOGIN_WINDOW_SECONDS:
+                    entry = {
+                        "count": 0,
+                        "first": now_ts,
+                        "locked_until": None,
+                    }
+
+                entry["count"] = entry.get("count", 0) + 1
+                highest_count = max(highest_count, entry["count"])
+
+                if entry["count"] >= MAX_LOGIN_ATTEMPTS:
+                    entry["locked_until"] = now_ts + LOCKOUT_SECONDS
+                    locked_now = True
+
+                LOGIN_ATTEMPTS[key] = entry
+
+            if locked_now:
+                flash(lock_message(LOCKOUT_SECONDS))
+            else:
+                attempts_left = max(0, MAX_LOGIN_ATTEMPTS - highest_count)
+
+                flash(
+                    f"Invalid username or password. "
+                    f"{attempts_left} attempt(s) remaining."
+                )
 
     return render_template("login.html", form=form)
-
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
     form = RegisterForm()
 
     if form.validate_on_submit():
+        existing_user = User.query.filter_by(username=form.username.data).first()
+
+        if existing_user:
+            flash("That username already exists. Please choose a different one.")
+            return render_template("register.html", form=form)
+
         hashed_password = bcrypt.generate_password_hash(
             form.password.data
         ).decode("utf-8")
@@ -729,6 +595,8 @@ def register():
         new_user = User()
         new_user.username = form.username.data
         new_user.password = hashed_password
+        new_user.role = "user"
+        new_user.is_admin = False
 
         db.session.add(new_user)
         db.session.commit()
@@ -1386,6 +1254,8 @@ def ensure_database_schema():
 
 # Error Handlers
 
+# Error Handlers
+
 @app.errorhandler(403)
 def forbidden(error):
     return render_template("403.html"), 403
@@ -1405,6 +1275,13 @@ def server_error(error):
 with app.app_context():
     db.create_all()
     ensure_database_schema()
+
+
+def create_app(test_config=None):
+    if test_config:
+        app.config.update(test_config)
+
+    return app
 
 
 if __name__ == "__main__":

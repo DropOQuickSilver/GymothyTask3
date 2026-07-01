@@ -1055,3 +1055,16 @@ body {
 .trend-line-label {
     fill: #2563eb;
 }
+
+.flash-messages {
+    margin-bottom: 1rem;
+}
+
+.flash-message {
+    padding: 0.85rem 1rem;
+    border-radius: 10px;
+    background: #fee2e2;
+    color: #991b1b;
+    font-weight: 700;
+    border: 1px solid #fecaca;
+}

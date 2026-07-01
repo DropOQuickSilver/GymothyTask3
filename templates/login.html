@@ -15,6 +15,18 @@
                 <p class="auth-subtext">Log in to continue tracking your workouts, nutrition, and progress.</p>
             </div>
 
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <div class="flash-messages">
+                        {% for message in messages %}
+                            <div class="flash-message">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
             <form method="POST" action="" class="auth-form" novalidate>
                 {{ form.hidden_tag() }}
 
