@@ -79,7 +79,12 @@ def load_user(user_id):
 def admin_required(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if not current_user.is_authenticated or not current_user.is_admin:
+        # Support both legacy `is_admin` boolean and the new `role` column.
+        if not current_user.is_authenticated or not (
+            getattr(current_user, "is_admin", False)
+            or getattr(current_user, "role", None) == "admin"
+            or (hasattr(current_user, "has_role") and current_user.has_role("admin"))
+        ):
             abort(403)
 
         return func(*args, **kwargs)

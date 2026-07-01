@@ -40,6 +40,17 @@ class User(db.Model, UserMixin):
         cascade="all, delete-orphan",
     )
 
+    def has_role(self, role_name: str) -> bool:
+        """Return True if the user has the given role.
+
+        This wraps the `role` column and keeps `is_admin` as a convenience
+        flag for backwards compatibility.
+        """
+        if self.is_admin:
+            return role_name == "admin"
+
+        return (self.role or "").lower() == (role_name or "").lower()
+
 
 class WorkoutSession(db.Model):
     id = db.Column(db.Integer, primary_key=True)
