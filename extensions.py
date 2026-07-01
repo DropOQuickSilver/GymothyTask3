@@ -19,7 +19,7 @@ def init_extensions(app):
     db.init_app(app)
     bcrypt.init_app(app)
     login_manager.init_app(app)
-    login_manager.login_view = "login"  # type: ignore[assignment]
+    login_manager.login_view = "auth.login"  # type: ignore[assignment]
 
 
 def get_redis_client():

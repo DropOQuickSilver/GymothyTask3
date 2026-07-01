@@ -76,7 +76,7 @@
 
                 {{ form.submit(class="auth-button") }}
 
-                <a href="{{ url_for('view_session', session_id=session.id) }}" class="auth-link">
+                <a href="{{ url_for('session.view_session', session_id=session.id) }}" class="auth-link">
                     Back to session
                 </a>
             </form>

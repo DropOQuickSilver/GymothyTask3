@@ -20,13 +20,13 @@
             <nav class="sidebar-nav">
                 <p class="nav-heading">Main</p>
                 <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
-                <a href="{{ url_for('sessions') }}" class="nav-link">Workout Sessions</a>
-                <a href="{{ url_for('macros') }}" class="nav-link">Macros</a>
-                <a href="{{ url_for('prs') }}" class="nav-link">Personal Records</a>
-                <a href="{{ url_for('prediction') }}" class="nav-link">Strength Prediction</a>
+                <a href="{{ url_for('session.sessions') }}" class="nav-link">Workout Sessions</a>
+                <a href="{{ url_for('meal.macros') }}" class="nav-link">Macros</a>
+                <a href="{{ url_for('pr.prs') }}" class="nav-link">Personal Records</a>
+                <a href="{{ url_for('prediction.prediction') }}" class="nav-link">Strength Prediction</a>
 
                 <p class="nav-heading nav-spacing">Account</p>
-                <a href="{{ url_for('logout') }}" class="nav-link">Log out</a>
+                <a href="{{ url_for('auth.logout') }}" class="nav-link">Log out</a>
             </nav>
         </aside>
 
@@ -38,7 +38,7 @@
                 </div>
 
                 <div class="topbar-right">
-                    <a href="{{ url_for('new_session') }}" class="primary-action">+ New Session</a>
+                    <a href="{{ url_for('session.new_session') }}" class="primary-action">+ New Session</a>
                 </div>
             </header>
 
@@ -69,12 +69,12 @@
                                         <td>{{ session.focus }}</td>
                                         <td><span class="table-badge">Saved</span></td>
                                         <td>
-                                            <a href="{{ url_for('view_session', session_id=session.id) }}" class="table-link">View</a>
+                                            <a href="{{ url_for('session.view_session', session_id=session.id) }}" class="table-link">View</a>
                                             |
-                                            <a href="{{ url_for('edit_session', session_id=session.id) }}" class="table-link">Edit</a>
+                                            <a href="{{ url_for('session.edit_session', session_id=session.id) }}" class="table-link">Edit</a>
                                             |
                                             <form method="POST"
-                                                action="{{ url_for('delete_session', session_id=session.id) }}"
+                                                action="{{ url_for('session.delete_session', session_id=session.id) }}"
                                                 style="display:inline;"
                                                 onsubmit="return confirm('Delete this session? This will also delete its exercises.');">
                                                 {{ delete_form.hidden_tag() }}

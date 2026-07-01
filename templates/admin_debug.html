@@ -19,14 +19,14 @@
             <nav class="sidebar-nav">
                 <p class="nav-heading">Main</p>
                 <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
-                <a href="{{ url_for('sessions') }}" class="nav-link">Workout Sessions</a>
-                <a href="{{ url_for('macros') }}" class="nav-link">Macros</a>
-                <a href="{{ url_for('prs') }}" class="nav-link">Personal Records</a>
-                <a href="{{ url_for('prediction') }}" class="nav-link">Strength Prediction</a>
+                <a href="{{ url_for('session.sessions') }}" class="nav-link">Workout Sessions</a>
+                <a href="{{ url_for('meal.macros') }}" class="nav-link">Macros</a>
+                <a href="{{ url_for('pr.prs') }}" class="nav-link">Personal Records</a>
+                <a href="{{ url_for('prediction.prediction') }}" class="nav-link">Strength Prediction</a>
 
                 <p class="nav-heading nav-spacing">Admin</p>
-                <a href="{{ url_for('admin_debug') }}" class="nav-link active">Admin Debug</a>
-                <a href="{{ url_for('logout') }}" class="nav-link">Log out</a>
+                <a href="{{ url_for('admin.admin_debug') }}" class="nav-link active">Admin Debug</a>
+                <a href="{{ url_for('auth.logout') }}" class="nav-link">Log out</a>
             </nav>
         </aside>
 
@@ -98,7 +98,7 @@
                                 </p>
                             </div>
 
-                            <form method="POST" action="{{ url_for('cleanup_orphans') }}">
+                            <form method="POST" action="{{ url_for('admin.cleanup_orphans') }}">
                                 {{ delete_form.hidden_tag() }}
                                 <button type="submit" class="danger-action">
                                     Delete Orphan Exercise Records

@@ -1068,3 +1068,129 @@ body {
     font-weight: 700;
     border: 1px solid #fecaca;
 }
+
+.flash-messages {
+    margin-bottom: 1rem;
+}
+
+.flash-message {
+    padding: 0.85rem 1rem;
+    border-radius: 10px;
+    background: #fee2e2;
+    color: #991b1b;
+    font-weight: 700;
+    border: 1px solid #fecaca;
+}
+
+.inline-delete-form {
+    display: inline;
+}
+
+.meal-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.delete-button {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
+}
+
+.nav-link.active {
+    font-weight: 700;
+}
+
+/* Smoother panel header layout */
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.panel-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+/* Makes the small Add Meal link look controlled */
+.panel-header .table-link {
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-decoration: none;
+    color: #2563eb;
+}
+
+.panel-header .table-link:hover {
+    text-decoration: underline;
+}
+
+/* Clean empty state for meals/panels */
+.empty-state {
+    padding: 2.5rem 1.5rem;
+    border: 1px dashed #cbd5e1;
+    border-radius: 18px;
+    background: #f8fafc;
+    text-align: center;
+    color: #64748b;
+}
+
+.empty-state h4 {
+    margin: 0 0 0.4rem;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.empty-state p {
+    margin: 0 auto 1.25rem;
+    max-width: 420px;
+    font-size: 0.98rem;
+    line-height: 1.5;
+    color: #64748b;
+}
+
+/* Smaller button inside empty states */
+.empty-state .primary-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    padding: 0.75rem 1.1rem;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    font-weight: 800;
+    text-decoration: none;
+}
+
+/* Keeps meal action buttons neat when meals exist */
+.meal-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.inline-delete-form {
+    display: inline;
+}
+
+.delete-button {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
+}
+
+.delete-button:hover {
+    text-decoration: underline;
+}

@@ -18,11 +18,11 @@
             </div>
 
             <div class="home-buttons" style="margin-bottom: 20px;">
-                <a href="{{ url_for('add_exercise', session_id=session.id) }}" class="auth-button">
+                <a href="{{ url_for('session.add_exercise', session_id=session.id) }}" class="auth-button">
                     Add Exercise
                 </a>
 
-                <a href="{{ url_for('sessions') }}" class="auth-button">
+                <a href="{{ url_for('session.sessions') }}" class="auth-button">
                     Back to Sessions
                 </a>
             </div>
@@ -37,12 +37,12 @@
                         <p>RPE: {{ exercise.rpe if exercise.rpe is not none else 'N/A' }}</p>
 
                         <div style="margin-top: 12px;">
-                            <a href="{{ url_for('edit_exercise', exercise_id=exercise.id) }}" class="table-link">
+                            <a href="{{ url_for('session.edit_exercise', exercise_id=exercise.id) }}" class="table-link">
                                 Edit
                             </a>
 
                             <form method="POST"
-                                  action="{{ url_for('delete_exercise', exercise_id=exercise.id) }}"
+                                  action="{{ url_for('session.delete_exercise', exercise_id=exercise.id) }}"
                                   style="display:inline;"
                                   onsubmit="return confirm('Delete this exercise?');">
                                 {{ delete_form.hidden_tag() }}
