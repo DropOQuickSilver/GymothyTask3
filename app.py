@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from functools import wraps
 
 from flask import Flask, render_template, url_for, redirect, flash, abort, request
@@ -8,7 +9,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import FlaskForm
 from wtforms import (StringField, PasswordField, SubmitField, IntegerField, FloatField, SelectField,)
 from wtforms.validators import (InputRequired, Length, ValidationError, NumberRange, Optional, Regexp,)
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, func
 
 from ml.strength_predictor import StrengthPredictor
 
@@ -16,6 +17,9 @@ from ml.strength_predictor import StrengthPredictor
 basedir = os.path.abspath(os.path.dirname(__file__))
 
 app = Flask(__name__)
+
+# Debug row limit for admin troubleshooting panels.
+DEBUG_ROW_LIMIT = int(os.environ.get("DEBUG_ROW_LIMIT", 50))
 
 # Secret key:
 # - Uses Render environment variable in production
@@ -415,6 +419,7 @@ def prepare_prediction_features(user_id, lift_name):
                     "estimated_1rm": float(estimated_1rm),
                     "volume": float(volume),
                     "rpe": float(rpe),
+                    "date": session.date,
                 }
             )
 
@@ -428,13 +433,22 @@ def prepare_prediction_features(user_id, lift_name):
         len(valid_records),
     )
 
+    days_since_last_session = 7
+    if len(valid_records) >= 2:
+        try:
+            last_date = datetime.strptime(valid_records[-1]["date"], "%Y-%m-%d")
+            previous_date = datetime.strptime(valid_records[-2]["date"], "%Y-%m-%d")
+            days_since_last_session = max(0, (last_date - previous_date).days)
+        except ValueError:
+            days_since_last_session = 7
+
     features = {
         "lift_name": lift_name,
         "session_number": len(valid_records),
         "estimated_1rm": float(latest["estimated_1rm"]),
         "volume": float(latest["volume"]),
         "avg_rpe": float(avg_rpe),
-        "days_since_last_session": 7,
+        "days_since_last_session": int(days_since_last_session),
     }
 
     return features, len(valid_records), valid_records
@@ -513,6 +527,7 @@ def build_projection_chart_points(history_points, projected_1rm):
     )
 
     values = [point["value"] for point in chart_values]
+    actual_values = [float(point["estimated_1rm"]) for point in recent_points]
 
     raw_min = min(values)
     raw_max = max(values)
@@ -559,14 +574,55 @@ def build_projection_chart_points(history_points, projected_1rm):
 
     polyline = " ".join(f"{point['x']},{point['y']}" for point in chart_values)
 
+    average_1rm = sum(actual_values) / len(actual_values)
+    average_y = bottom - ((average_1rm - y_min) / (y_max - y_min) * chart_height)
+
+    x_values = list(range(len(actual_values)))
+    y_values = actual_values
+    x_mean = sum(x_values) / len(x_values)
+    y_mean = sum(y_values) / len(y_values)
+
+    numerator = sum(
+        (x - x_mean) * (y - y_mean)
+        for x, y in zip(x_values, y_values)
+    )
+    denominator = sum((x - x_mean) ** 2 for x in x_values)
+
+    slope = numerator / denominator if denominator else 0
+    intercept = y_mean - slope * x_mean
+
+    trend_y_start = intercept
+    trend_y_end = intercept + slope * (len(x_values) - 1)
+
+    trend_plot_y1 = bottom - ((trend_y_start - y_min) / (y_max - y_min) * chart_height)
+    trend_plot_y2 = bottom - ((trend_y_end - y_min) / (y_max - y_min) * chart_height)
+
+    first_real_point = chart_values[0]
+    last_real_point = chart_values[-2]
+
     return {
         "points": chart_values,
         "polyline": polyline,
         "min_value": y_min,
         "max_value": y_max,
         "y_ticks": y_ticks,
+        "average_1rm": round(average_1rm, 2),
+        "average_line": {
+            "x1": left,
+            "x2": right,
+            "y": round(average_y, 2),
+            "label_x": round((left + right) / 2, 2),
+            "label_y": round(average_y - 8, 2),
+        },
+        "trend_line": {
+            "x1": first_real_point["x"],
+            "y1": round(trend_plot_y1, 2),
+            "x2": last_real_point["x"],
+            "y2": round(trend_plot_y2, 2),
+            "label_x": round((first_real_point["x"] + last_real_point["x"]) / 2, 2),
+            "label_y": round(min(trend_plot_y1, trend_plot_y2) - 12, 2),
+        },
     }
-
 
 def get_orphan_exercises():
     return (
@@ -639,16 +695,23 @@ def register():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    workout_sessions = (
-        WorkoutSession.query.filter_by(user_id=current_user.id)
-        .order_by(WorkoutSession.id.desc())
-        .all()
+    total_sessions = (
+        db.session.query(func.count(WorkoutSession.id))
+        .filter(WorkoutSession.user_id == current_user.id)
+        .scalar()
+        or 0
     )
 
-    meals = (
-        Meal.query.filter_by(user_id=current_user.id)
-        .order_by(Meal.id.desc())
-        .all()
+    total_meals, total_calories, total_protein, total_carbs, total_fats = (
+        db.session.query(
+            func.count(Meal.id),
+            func.coalesce(func.sum(Meal.calories), 0),
+            func.coalesce(func.sum(Meal.protein), 0),
+            func.coalesce(func.sum(Meal.carbs), 0),
+            func.coalesce(func.sum(Meal.fats), 0),
+        )
+        .filter(Meal.user_id == current_user.id)
+        .one()
     )
 
     prs = (
@@ -657,16 +720,19 @@ def dashboard():
         .all()
     )
 
-    total_sessions = len(workout_sessions)
-    total_meals = len(meals)
+    recent_sessions = (
+        WorkoutSession.query.filter_by(user_id=current_user.id)
+        .order_by(WorkoutSession.id.desc())
+        .limit(5)
+        .all()
+    )
 
-    total_calories = sum(meal.calories for meal in meals)
-    total_protein = sum(meal.protein for meal in meals)
-    total_carbs = sum(meal.carbs for meal in meals)
-    total_fats = sum(meal.fats for meal in meals)
-
-    recent_sessions = workout_sessions[:5]
-    recent_meals = meals[:5]
+    recent_meals = (
+        Meal.query.filter_by(user_id=current_user.id)
+        .order_by(Meal.id.desc())
+        .limit(5)
+        .all()
+    )
 
     return render_template(
         "dashboard.html",
@@ -790,10 +856,16 @@ def macros():
         .all()
     )
 
-    total_calories = sum(meal.calories for meal in meals)
-    total_protein = sum(meal.protein for meal in meals)
-    total_carbs = sum(meal.carbs for meal in meals)
-    total_fats = sum(meal.fats for meal in meals)
+    total_calories, total_protein, total_carbs, total_fats = (
+        db.session.query(
+            func.coalesce(func.sum(Meal.calories), 0),
+            func.coalesce(func.sum(Meal.protein), 0),
+            func.coalesce(func.sum(Meal.carbs), 0),
+            func.coalesce(func.sum(Meal.fats), 0),
+        )
+        .filter(Meal.user_id == current_user.id)
+        .one()
+    )
 
     delete_form = DeleteForm()
 
@@ -1194,12 +1266,12 @@ def logout():
 @login_required
 @admin_required
 def admin_debug():
-    users = User.query.order_by(User.id.asc()).all()
-    sessions = WorkoutSession.query.order_by(WorkoutSession.id.desc()).all()
-    exercises = ExerciseEntry.query.order_by(ExerciseEntry.id.desc()).all()
-    meals = Meal.query.order_by(Meal.id.desc()).all()
-    prs = PersonalRecord.query.order_by(PersonalRecord.id.desc()).all()
-    prediction_logs = PredictionLog.query.order_by(PredictionLog.id.desc()).all()
+    users = User.query.order_by(User.id.asc()).limit(DEBUG_ROW_LIMIT).all()
+    sessions = WorkoutSession.query.order_by(WorkoutSession.id.desc()).limit(DEBUG_ROW_LIMIT).all()
+    exercises = ExerciseEntry.query.order_by(ExerciseEntry.id.desc()).limit(DEBUG_ROW_LIMIT).all()
+    meals = Meal.query.order_by(Meal.id.desc()).limit(DEBUG_ROW_LIMIT).all()
+    prs = PersonalRecord.query.order_by(PersonalRecord.id.desc()).limit(DEBUG_ROW_LIMIT).all()
+    prediction_logs = PredictionLog.query.order_by(PredictionLog.id.desc()).limit(DEBUG_ROW_LIMIT).all()
 
     orphan_exercises = get_orphan_exercises()
 

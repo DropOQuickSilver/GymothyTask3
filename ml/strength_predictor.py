@@ -9,6 +9,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, PolynomialFeatures, StandardScaler
 
+MODEL_CACHE = None
+
 
 class StrengthPredictor:
         """
@@ -154,12 +156,19 @@ class StrengthPredictor:
             joblib.dump(payload, self.model_path)
 
         def load_model(self):
+            global MODEL_CACHE
+
+            if MODEL_CACHE is not None:
+                self.model, self.metrics = MODEL_CACHE
+                return self.model
+
             if not os.path.exists(self.model_path):
                 raise FileNotFoundError("Saved model file was not found. Train the model first.")
 
             payload = joblib.load(self.model_path)
             self.model = payload["model"]
             self.metrics = payload.get("metrics", {})
+            MODEL_CACHE = (self.model, self.metrics)
             return self.model
 
         def predict_next_1rm(self, features):

@@ -110,12 +110,51 @@
 
                                     <line x1="80" y1="30" x2="80" y2="220" class="chart-axis"></line>
                                     <line x1="80" y1="220" x2="540" y2="220" class="chart-axis"></line>
+                                    {% if result.chart.trend_line %}
+                                        <line
+                                            x1="{{ result.chart.trend_line.x1 }}"
+                                            y1="{{ result.chart.trend_line.y1 }}"
+                                            x2="{{ result.chart.trend_line.x2 }}"
+                                            y2="{{ result.chart.trend_line.y2 }}"
+                                            class="trend-line"
+                                        />
 
+                                        <text
+                                            x="{{ result.chart.trend_line.label_x }}"
+                                            y="{{ result.chart.trend_line.label_y }}"
+                                            class="trend-line-label">
+                                            Trend
+                                        </text>
+                                    {% endif %}
+                                    {% if result.chart.average_line %}
+                                        <line
+                                            x1="{{ result.chart.average_line.x1 }}"
+                                            y1="{{ result.chart.average_line.y }}"
+                                            x2="{{ result.chart.average_line.x2 }}"
+                                            y2="{{ result.chart.average_line.y }}"
+                                            class="average-trend-line"
+                                        />
+
+                                        <text
+                                            x="{{ result.chart.average_line.label_x }}"
+                                            y="{{ result.chart.average_line.label_y }}"
+                                            class="average-trend-label">
+                                            Avg {{ result.chart.average_1rm }} kg
+                                        </text>
+                                    {% endif %}
                                     <polyline
                                         points="{{ result.chart.polyline }}"
                                         class="prediction-line"
                                         fill="none">
                                     </polyline>
+
+                                    <g class="chart-legend" aria-hidden="true">
+                                        <rect x="88" y="240" width="14" height="4" class="legend-line legend-line--average" />
+                                        <text x="110" y="246" class="legend-text legend-toggle legend-toggle--average">Average line</text>
+
+                                        <rect x="240" y="240" width="14" height="4" class="legend-line legend-line--trend" />
+                                        <text x="262" y="246" class="legend-text legend-toggle legend-toggle--trend">Trend line</text>
+                                    </g>
 
                                     {% for point in result.chart.points %}
                                         <circle
@@ -220,6 +259,13 @@
                                     <span>Model MAE</span>
                                     <strong>{{ result.metrics.mae }} kg</strong>
                                 </div>
+
+                                {% if result.metrics.linear_mae is defined and result.metrics.polynomial_mae is defined %}
+                                    <div class="macro-row">
+                                        <span>Candidate MAE (Linear / Polynomial)</span>
+                                        <strong>{{ result.metrics.linear_mae }} / {{ result.metrics.polynomial_mae }} kg</strong>
+                                    </div>
+                                {% endif %}
                             </div>
 
                             <div class="warning-box">
@@ -265,5 +311,38 @@
             </section>
         </main>
     </div>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const legendConfig = [
+                {
+                    selector: ".legend-toggle--average",
+                    targets: [".average-trend-line", ".average-trend-label"],
+                },
+                {
+                    selector: ".legend-toggle--trend",
+                    targets: [".trend-line", ".trend-line-label"],
+                },
+            ];
+
+            legendConfig.forEach(({ selector, targets }) => {
+                const label = document.querySelector(selector);
+                if (!label) {
+                    return;
+                }
+
+                label.style.cursor = "pointer";
+
+                label.addEventListener("click", function () {
+                    const hidden = label.classList.toggle("legend-hidden");
+
+                    targets.forEach((target) => {
+                        document.querySelectorAll(target).forEach((item) => {
+                            item.style.display = hidden ? "none" : "";
+                        });
+                    });
+                });
+            });
+        });
+    </script>
 </body>
 </html>
