@@ -1194,3 +1194,218 @@ body {
 .delete-button:hover {
     text-decoration: underline;
 }
+
+
+/*Table styles */
+
+.main-content table,
+.dashboard-page table,
+.panel table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+/* Table header */
+.main-content thead,
+.dashboard-page thead,
+.panel thead {
+    background: #f8fafc;
+}
+
+.main-content th,
+.dashboard-page th,
+.panel th {
+    padding: 1.1rem 1.25rem;
+    text-align: left;
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #475569;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.main-content td,
+.dashboard-page td,
+.panel td {
+    padding: 1.15rem 1.25rem;
+    font-size: 0.98rem;
+    color: #0f172a;
+    border-bottom: 1px solid #eef2f7;
+    vertical-align: middle;
+}
+
+.main-content tbody tr:last-child td,
+.dashboard-page tbody tr:last-child td,
+.panel tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.main-content tbody tr,
+.dashboard-page tbody tr,
+.panel tbody tr {
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.main-content tbody tr:hover,
+.dashboard-page tbody tr:hover,
+.panel tbody tr:hover {
+    background: #f8fafc;
+}
+
+.table-link {
+    color: #2563eb;
+    font-weight: 800;
+    text-decoration: none;
+    transition: color 0.2s ease, opacity 0.2s ease;
+}
+
+.table-link:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+
+.delete-button,
+button.table-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: #dc2626;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.delete-button:hover,
+button.table-link:hover {
+    color: #b91c1c;
+    text-decoration: underline;
+}
+
+td form {
+    display: inline;
+}
+
+td .table-link + .table-link,
+td .table-link + form,
+td form + .table-link {
+    margin-left: 0.45rem;
+}
+
+.status-pill,
+.saved-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    background: #eef2ff;
+    color: #3730a3;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+td span {
+    max-width: max-content;
+}
+
+/* Empty table row */
+.main-content td[colspan],
+.dashboard-page td[colspan],
+.panel td[colspan] {
+    padding: 2.5rem 1.25rem;
+    text-align: center;
+    color: #64748b;
+    font-size: 1rem;
+    font-weight: 700;
+    background: #ffffff;
+}
+
+/* Page headings above tables */
+.main-content h1,
+.dashboard-page h1 {
+    margin-bottom: 1.5rem;
+    font-size: clamp(2rem, 4vw, 2.6rem);
+    font-weight: 900;
+    letter-spacing: -0.04em;
+    color: #0f172a;
+}
+
+/* Add breathing room around standalone tables */
+.main-content > table,
+.dashboard-page > table,
+.panel > table {
+    margin-top: 1rem;
+}
+
+/* Mobile table handling */
+@media (max-width: 800px) {
+    .main-content table,
+    .dashboard-page table,
+    .panel table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+        border-radius: 14px;
+    }
+
+    .main-content th,
+    .dashboard-page th,
+    .panel th,
+    .main-content td,
+    .dashboard-page td,
+    .panel td {
+        padding: 0.9rem 1rem;
+    }
+}
+
+/* Home Buttons */
+
+.home-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 2rem;
+    flex-wrap: wrap;
+}
+
+.home-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 130px;
+    padding: 0.85rem 1.25rem;
+    border-radius: 14px;
+    font-size: 0.98rem;
+    font-weight: 800;
+    text-decoration: none;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.home-button.primary {
+    background: #2563eb;
+    color: #ffffff;
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.25);
+}
+
+.home-button.primary:hover {
+    background: #1d4ed8;
+    transform: translateY(-2px);
+}
+
+.home-button.secondary {
+    background: #ffffff;
+    color: #2563eb;
+    border: 1px solid #cbd5e1;
+}
+
+.home-button.secondary:hover {
+    background: #f8fafc;
+    transform: translateY(-2px);
+}

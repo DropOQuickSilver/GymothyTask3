@@ -40,7 +40,7 @@ def new_pr():
         db.session.add(new_record)
         db.session.commit()
 
-        flash("Personal record added successfully.")
+        flash("Personal record added successfully.", "pr")
         return redirect(url_for("pr.prs"))
 
     return render_template("new_pr.html", form=form)
@@ -94,5 +94,5 @@ def delete_pr(pr_id):
     db.session.delete(personal_record)
     db.session.commit()
 
-    flash("Personal record deleted successfully.")
+    flash("Personal record deleted successfully.", "pr")
     return redirect(url_for("pr.prs"))

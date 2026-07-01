@@ -122,7 +122,7 @@ def login():
             LOGIN_ATTEMPTS.pop(ip_key, None)
 
             login_user(user)
-            flash("Logged in successfully.")
+            flash("Logged in successfully.", "auth")
             return redirect(url_for("dashboard"))
 
         # Failed login attempt using Redis.

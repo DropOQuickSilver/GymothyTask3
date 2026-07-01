@@ -48,6 +48,18 @@
                 </div>
             </header>
 
+            {% with messages = get_flashed_messages(with_categories=true, category_filter=["pr", "error"]) %}
+                {% if messages %}
+                    <div class="flash-messages">
+                        {% for category, message in messages %}
+                            <div class="flash-message flash-{{ category }}">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
             <section class="dashboard-grid">
                 <article class="panel large-panel">
                     <div class="panel-header">
@@ -70,12 +82,12 @@
                                         <td>{{ pr.lift_name }}</td>
                                         <td>{{ pr.weight }} kg</td>
                                         <td>
-                                            <a href="{{ url_for('edit_pr', pr_id=pr.id) }}" class="table-link">
+                                            <a href="{{ url_for('pr.edit_pr', pr_id=pr.id) }}" class="table-link">
                                                 Edit
                                             </a>
 
-                                            <form method="POST"
-                                                  action="{{ url_for('delete_pr', pr_id=pr.id) }}"
+                                              <form method="POST"
+                                                  action="{{ url_for('pr.delete_pr', pr_id=pr.id) }}"
                                                   style="display:inline;"
                                                   onsubmit="return confirm('Delete this personal record?');">
                                                 {{ delete_form.hidden_tag() }}

@@ -25,7 +25,7 @@ def add_meal():
         db.session.add(new_meal)
         db.session.commit()
 
-        flash("Meal added successfully.")
+        flash("Meal added successfully.", "meal")
         return redirect(url_for("meal.macros"))
 
     return render_template("add_meal.html", form=form)
@@ -82,7 +82,7 @@ def delete_meal(meal_id):
     db.session.delete(meal)
     db.session.commit()
 
-    flash("Meal deleted successfully.")
+    flash("Meal deleted successfully.", "meal")
     return redirect(url_for("meal.macros"))
 
 

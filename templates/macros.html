@@ -24,7 +24,7 @@
                 <a href="{{ url_for('session.sessions') }}" class="nav-link">Workout Sessions</a>
                 <a href="{{ url_for('meal.macros') }}" class="nav-link active">Macros</a>
                 <a href="{{ url_for('pr.prs') }}" class="nav-link">Personal Records</a>
-                <a href="{{ url_for('prediction.prediction') }}" class="nav-link">Prediction</a>
+                <a href="{{ url_for('prediction.prediction') }}" class="nav-link">Strength Prediction</a>
 
                 <p class="nav-heading nav-spacing">Account</p>
 
@@ -44,11 +44,11 @@
                 </div>
             </header>
 
-            {% with messages = get_flashed_messages() %}
+            {% with messages = get_flashed_messages(with_categories=true, category_filter=["meal", "macro", "error"]) %}
                 {% if messages %}
                     <div class="flash-messages">
-                        {% for message in messages %}
-                            <div class="flash-message">
+                        {% for category, message in messages %}
+                            <div class="flash-message flash-{{ category }}">
                                 {{ message }}
                             </div>
                         {% endfor %}
