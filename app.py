@@ -13,6 +13,12 @@ from sqlalchemy import inspect, text, func
 
 from ml.strength_predictor import StrengthPredictor
 
+# Simple in-memory login attempt tracker (use Redis for production)
+LOGIN_ATTEMPTS = {}
+MAX_LOGIN_ATTEMPTS = int(os.environ.get("MAX_LOGIN_ATTEMPTS", 5))
+LOGIN_WINDOW_SECONDS = int(os.environ.get("LOGIN_WINDOW_SECONDS", 300))
+LOCKOUT_SECONDS = int(os.environ.get("LOCKOUT_SECONDS", 900))
+
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
@@ -65,6 +71,8 @@ class User(db.Model, UserMixin):
     username = db.Column(db.String(60), nullable=False, unique=True)
     password = db.Column(db.String(200), nullable=False)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
+    # New role column provides a clearer extensible role system (e.g. 'user','admin','viewer')
+    role = db.Column(db.String(30), nullable=False, default="user")
 
     workout_sessions = db.relationship(
         "WorkoutSession",
@@ -632,6 +640,16 @@ def get_orphan_exercises():
         .all()
     )
 
+cached_strength_predictor = None
+
+def get_strength_predictor():
+    global cached_strength_predictor
+
+    if cached_strength_predictor is None:
+        cached_strength_predictor = StrengthPredictor()
+        cached_strength_predictor.load_model()
+
+    return cached_strength_predictor
 
 def delete_orphan_exercises():
     orphan_exercises = get_orphan_exercises()
@@ -658,14 +676,43 @@ def home():
 def login():
     form = LoginForm()
 
+    # handle lockout logic based on username
+    username = form.username.data if request.method == "POST" else None
+    now_ts = datetime.utcnow().timestamp()
+
+    if username:
+        entry = LOGIN_ATTEMPTS.get(username, {"count": 0, "first": now_ts, "locked_until": None})
+        # if locked, inform the user
+        locked_until = entry.get("locked_until")
+        if locked_until and now_ts < locked_until:
+            flash("Account temporarily locked due to too many failed login attempts. Try again later.")
+            return render_template("login.html", form=form)
+
     if form.validate_on_submit():
         user = User.query.filter_by(username=form.username.data).first()
 
         if user and bcrypt.check_password_hash(user.password, form.password.data):
+            # success -> clear attempts and login
+            if username in LOGIN_ATTEMPTS:
+                del LOGIN_ATTEMPTS[username]
             login_user(user)
             return redirect(url_for("dashboard"))
 
-        flash("Invalid username or password.")
+        # failed login -> record attempt
+        entry = LOGIN_ATTEMPTS.get(username, {"count": 0, "first": now_ts, "locked_until": None})
+        # reset window if past
+        if now_ts - entry.get("first", now_ts) > LOGIN_WINDOW_SECONDS:
+            entry = {"count": 0, "first": now_ts, "locked_until": None}
+
+        entry["count"] = entry.get("count", 0) + 1
+        if entry["count"] >= MAX_LOGIN_ATTEMPTS:
+            entry["locked_until"] = now_ts + LOCKOUT_SECONDS
+            flash("Too many failed login attempts. Account locked temporarily.")
+        else:
+            attempts_left = MAX_LOGIN_ATTEMPTS - entry["count"]
+            flash(f"Invalid username or password. {attempts_left} attempt(s) remaining.")
+
+        LOGIN_ATTEMPTS[username] = entry
 
     return render_template("login.html", form=form)
 
@@ -770,9 +817,7 @@ def prediction():
             )
         else:
             try:
-                predictor = StrengthPredictor()
-                predictor.load_model()
-
+                predictor = get_strength_predictor()
                 ml_next_1rm = predictor.predict_next_1rm(features)
 
                 projection = calculate_three_week_projection(
@@ -1330,6 +1375,13 @@ def ensure_database_schema():
                 connection.execute(
                     text("ALTER TABLE prediction_log ADD COLUMN created_at DATETIME")
                 )
+
+    # Ensure the users table has a 'role' column for improved role management
+    if "user" in inspector.get_table_names():
+        user_columns = [c["name"] for c in inspector.get_columns("user")]
+        if "role" not in user_columns:
+            with db.engine.begin() as connection:
+                connection.execute(text("ALTER TABLE user ADD COLUMN role TEXT DEFAULT 'user'"))
 
 
 # Error Handlers
