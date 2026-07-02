@@ -14,12 +14,14 @@ admin_bp = Blueprint("admin", __name__)
 def admin_required(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if not current_user.is_authenticated or not (
+        is_admin_user = (
             getattr(current_user, "is_admin", False)
-            or getattr(current_user, "role", None) == "admin"
-            or (hasattr(current_user, "has_role") and current_user.has_role("admin"))
-        ):
-            abort(403)
+            or getattr(current_user, "role", "") == "admin"
+        )
+
+        if not is_admin_user:
+            flash("You do not have permission to access the admin page.", "error")
+            return redirect(url_for("dashboard"))
 
         return func(*args, **kwargs)
 
