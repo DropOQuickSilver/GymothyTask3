@@ -63,15 +63,54 @@ Local Setup Instructions:
           http://127.0.0.1:5000
 
 
-  Gymothy also has an admin debug page for inspecting database records. To make an account an admin, first create an account through the stardard 
-  sign up page. Then:
-    1. open terminal
-    2. run "from app import app, db, User
-            app.app_context().push()
-            user = User.query.filter_by(username="ajpayj111").first()
-            user.is_admin = True
-            db.session.commit()"
-    3. Now restart the app again and login
-    4. The admin debug page can be accessed at /admin/debug that can only be accessed through an admin account
+Admin Setup:
+Gymothy includes a protected admin/debug page for inspecting database records during development. This page is only accessible to users with admin permissions.
+To create an admin account:
+ 1. First register a normal account through the Gymothy sign-up page. After the account has been created, open the project folder in Terminal and start Python:
+ 2. from app import create_app
+    from extensions import db
+    from models import User
+    
+    app = create_app()
+    
+    with app.app_context():
+       user = User.query.filter_by(username="YOUR_USERNAME").first()
+   
+       if user:
+           user.is_admin = True
+           user.role = "admin"
+           db.session.commit()
+           print(f"{user.username} has been promoted to admin.")
+       else:
+           print("User not found. Make sure the account has been created first.")
 
-            
+    Replacing YOUR_USERNAME with the account name
+
+3. Then to access the admin page, type the url "/admin/debug
+
+
+GymothyTask3/
+│
+├── app.py                    # Main Flask application factory and dashboard routes
+├── extensions.py             # Shared Flask extensions
+├── models.py                 # SQLAlchemy database models
+├── forms.py                  # Flask-WTF form classes and validators
+├── utils.py                  # Helper functions
+├── backup_database.py        # Timestamped database backup script
+├── requirements.txt          # Python dependencies
+│
+├── routes/                   # Modular Flask blueprints
+│   ├── auth_routes.py
+│   ├── session_routes.py
+│   ├── meal_routes.py
+│   ├── pr_routes.py
+│   ├── prediction_routes.py
+│   └── admin_routes.py
+│
+├── ml/                       # Machine learning files
+│   ├── strength_predictor.py
+│   └── train_model.py
+│
+├── templates/                # Jinja2 HTML templates
+├── static/                   # CSS and static assets
+└── backups/                  # Database backup output folder
